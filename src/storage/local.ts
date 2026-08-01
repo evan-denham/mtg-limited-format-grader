@@ -1,0 +1,125 @@
+/** localStorage persistence.
+ *
+ *  Two distinct jobs:
+ *  1. The frozen card pool, cached by session id. It is immutable, so it is
+ *     written once and re-read forever, avoiding a ~300KB fetch per load.
+ *  2. Local session state, which is the whole store when running without a
+ *     backend and the offline write-behind buffer once Supabase is wired up.
+ */
+
+import type { CardRecord, Grade, Grader, SessionMeta } from '../domain/types'
+
+const POOL_PREFIX = 'mtglfg.pool.'
+const SESSION_PREFIX = 'mtglfg.session.'
+const INDEX_KEY = 'mtglfg.index'
+const IDENTITY_PREFIX = 'mtglfg.identity.'
+
+export interface LocalSession {
+  meta: SessionMeta
+  graders: Grader[]
+  grades: Grade[]
+  updatedAt: number
+}
+
+export interface SessionIndexEntry {
+  id: string
+  code: string
+  name: string
+  setCode: string
+  setName: string
+  updatedAt: number
+}
+
+function read<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : null
+  } catch {
+    return null
+  }
+}
+
+function write(key: string, value: unknown): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+    return true
+  } catch {
+    // Quota exceeded. The caller decides whether that is fatal.
+    return false
+  }
+}
+
+// --- Card pool (immutable, cached by session id) ---
+
+export function loadPool(sessionId: string): CardRecord[] | null {
+  return read<CardRecord[]>(POOL_PREFIX + sessionId)
+}
+
+export function savePool(sessionId: string, cards: CardRecord[]): boolean {
+  return write(POOL_PREFIX + sessionId, cards)
+}
+
+// --- Session state ---
+
+export function loadSession(sessionId: string): LocalSession | null {
+  return read<LocalSession>(SESSION_PREFIX + sessionId)
+}
+
+export function saveSession(session: LocalSession): boolean {
+  const ok = write(SESSION_PREFIX + session.meta.id, session)
+  if (ok) touchIndex(session)
+  return ok
+}
+
+export function deleteSession(sessionId: string): void {
+  localStorage.removeItem(SESSION_PREFIX + sessionId)
+  localStorage.removeItem(POOL_PREFIX + sessionId)
+  localStorage.removeItem(IDENTITY_PREFIX + sessionId)
+  write(
+    INDEX_KEY,
+    listSessions().filter((s) => s.id !== sessionId),
+  )
+}
+
+// --- Index of known sessions, for the landing screen ---
+
+export function listSessions(): SessionIndexEntry[] {
+  return (read<SessionIndexEntry[]>(INDEX_KEY) ?? []).sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+function touchIndex(session: LocalSession): void {
+  const entry: SessionIndexEntry = {
+    id: session.meta.id,
+    code: session.meta.code,
+    name: session.meta.name,
+    setCode: session.meta.setCode,
+    setName: session.meta.setName,
+    updatedAt: session.updatedAt,
+  }
+  const rest = listSessions().filter((s) => s.id !== entry.id)
+  write(INDEX_KEY, [entry, ...rest])
+}
+
+export function findSessionByCode(code: string): SessionIndexEntry | null {
+  const needle = code.trim().toUpperCase()
+  return listSessions().find((s) => s.code.toUpperCase() === needle) ?? null
+}
+
+// --- Which grader this device is signed in as ---
+
+export interface Identity {
+  graderId: string
+  graderName: string
+}
+
+export function loadIdentity(sessionId: string): Identity | null {
+  return read<Identity>(IDENTITY_PREFIX + sessionId)
+}
+
+export function saveIdentity(sessionId: string, identity: Identity): void {
+  write(IDENTITY_PREFIX + sessionId, identity)
+}
+
+export function clearIdentity(sessionId: string): void {
+  localStorage.removeItem(IDENTITY_PREFIX + sessionId)
+}

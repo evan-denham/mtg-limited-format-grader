@@ -1,122 +1,185 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect } from 'react'
+import { navigate, useRoute, type Route } from './router'
+import { CreateSession } from './screens/CreateSession'
+import { GradeScreen } from './screens/GradeScreen'
+import { Landing } from './screens/Landing'
+import { PickGrader } from './screens/PickGrader'
+import { ResultsScreen } from './screens/ResultsScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
+import { Notice, Spinner } from './components/ui'
+import { useSession } from './store/session'
+import { backend } from './supabase/backend'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const route = useRoute()
+  const sessionId = 'sessionId' in route ? route.sessionId : null
+
+  const meta = useSession((s) => s.meta)
+  const meId = useSession((s) => s.meId)
+  const loading = useSession((s) => s.loading)
+  const error = useSession((s) => s.error)
+  const load = useSession((s) => s.load)
+  const applyRemoteGrade = useSession((s) => s.applyRemoteGrade)
+  const applyRemoteGrader = useSession((s) => s.applyRemoteGrader)
+  const applyRemoteSettings = useSession((s) => s.applyRemoteSettings)
+
+  // Load whenever the route points at a session we do not already hold.
+  useEffect(() => {
+    if (sessionId && meta?.id !== sessionId) void load(sessionId)
+  }, [sessionId, meta?.id, load])
+
+  // Live sync. Re-subscribes only when the session changes.
+  useEffect(() => {
+    if (!sessionId || !backend.configured) return
+    return backend.subscribe(sessionId, {
+      onGrade: applyRemoteGrade,
+      onGrader: applyRemoteGrader,
+      onSettings: applyRemoteSettings,
+    })
+  }, [sessionId, applyRemoteGrade, applyRemoteGrader, applyRemoteSettings])
+
+  if (route.name === 'landing') {
+    return <Shell><Landing /></Shell>
+  }
+  if (route.name === 'create') {
+    return <Shell><CreateSession /></Shell>
+  }
+
+  if (loading) {
+    return (
+      <Shell>
+        <Spinner label="Loading session" />
+      </Shell>
+    )
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <div className="mx-auto max-w-md space-y-4">
+          <Notice tone="error">{error}</Notice>
+          <a href="#/" className="text-sm text-[--color-accent]">
+            Back to start
+          </a>
+        </div>
+      </Shell>
+    )
+  }
+
+  if (!meta) return <Shell>{null}</Shell>
+
+  const session = { name: meta.name, code: meta.code, id: meta.id }
+
+  // Every session screen needs to know who is grading.
+  if (!meId) {
+    return (
+      <Shell session={session} route={route}>
+        <PickGrader />
+      </Shell>
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <Shell session={session} route={route} tabs>
+      {route.name === 'results' ? (
+        <ResultsScreen />
+      ) : route.name === 'settings' ? (
+        <SettingsScreen />
+      ) : (
+        <GradeScreen />
+      )}
+    </Shell>
   )
 }
 
-export default App
+function Shell({
+  children,
+  session,
+  route,
+  tabs,
+}: {
+  children: React.ReactNode
+  session?: { name: string; code: string; id: string }
+  route?: Route
+  tabs?: boolean
+}) {
+  const meId = useSession((s) => s.meId)
+  const graders = useSession((s) => s.graders)
+  const me = graders.find((g) => g.id === meId)
+
+  return (
+    <div className="min-h-full">
+      <header className="border-b border-[--color-edge] bg-[--color-panel]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          <a href="#/" className="text-sm font-medium hover:text-[--color-accent]">
+            Limited Format Grader
+          </a>
+          {session ? (
+            <>
+              <span className="text-sm text-[--color-muted]">{session.name}</span>
+              <span className="rounded border border-[--color-edge] px-2 py-0.5 font-mono text-xs text-[--color-muted]">
+                {session.code}
+              </span>
+            </>
+          ) : null}
+
+          {tabs && session && route ? (
+            <nav className="ml-auto flex gap-1">
+              <Tab route={route} target="grade" sessionId={session.id}>
+                Grade
+              </Tab>
+              <Tab route={route} target="results" sessionId={session.id}>
+                Results
+              </Tab>
+              <Tab route={route} target="settings" sessionId={session.id}>
+                Settings
+              </Tab>
+            </nav>
+          ) : null}
+
+          {me && session ? (
+            <button
+              onClick={() => {
+                localStorage.removeItem(`mtglfg.identity.${session.id}`)
+                window.location.reload()
+              }}
+              className="text-xs text-[--color-muted] hover:text-[--color-text]"
+              title="Switch grader"
+            >
+              {me.name}
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+    </div>
+  )
+}
+
+function Tab({
+  route,
+  target,
+  sessionId,
+  children,
+}: {
+  route: Route
+  target: 'grade' | 'results' | 'settings'
+  sessionId: string
+  children: React.ReactNode
+}) {
+  const active = route.name === target
+  return (
+    <button
+      onClick={() => navigate({ name: target, sessionId } as Route)}
+      className={
+        'rounded px-3 py-1.5 text-sm transition-colors ' +
+        (active
+          ? 'bg-[--color-ink] text-[--color-text]'
+          : 'text-[--color-muted] hover:text-[--color-text]')
+      }
+    >
+      {children}
+    </button>
+  )
+}

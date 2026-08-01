@@ -40,8 +40,15 @@ describe('combine', () => {
   })
 
   it('averages and rounds to the nearest letter', () => {
-    // B+ = 9, A- = 10 -> mean 9.5 -> rounds to A-
+    // B+ = 9, A- = 10 -> mean 9.5 -> half-up to index 10 = A-
     expect(combine(['B+', 'A-'])).toMatchObject({ letter: 'A-', mean: 9.5 })
+    // C- = 4, C+ = 6 -> mean 5 -> C, exactly between with no rounding needed
+    expect(combine(['C-', 'C+'])).toMatchObject({ letter: 'C', mean: 5 })
+  })
+
+  it('rounds exact halves upward, consistently', () => {
+    // C = 5, A- = 10 -> mean 7.5 -> index 8 = B, not B- (index 7).
+    expect(combine(['C', 'A-'])).toMatchObject({ letter: 'B', mean: 7.5 })
   })
 
   it('reports the spread in scale steps', () => {

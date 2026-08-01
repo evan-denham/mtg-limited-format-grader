@@ -11,13 +11,16 @@ const API = 'https://api.scryfall.com'
 const MIN_INTERVAL_MS = 100
 
 export class ScryfallError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string,
-  ) {
+  // Declared as fields rather than constructor parameter properties: the
+  // project builds with erasableSyntaxOnly, which forbids that shorthand.
+  readonly status: number
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ScryfallError'
+    this.status = status
+    this.code = code
   }
 
   /** Scryfall returns 404 with code 'not_found' when a search matches nothing.
