@@ -45,7 +45,7 @@ export function Landing() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl">Limited Format Grader</h1>
-        <p className="mt-1 text-sm text-[--color-muted]">
+        <p className="mt-1 text-sm text-muted">
           Grade every card in a set, card by card, with one or more graders.
         </p>
       </div>
@@ -82,10 +82,10 @@ export function Landing() {
               <li key={s.id} className="flex items-center justify-between gap-3">
                 <button
                   onClick={() => navigate({ name: 'grade', sessionId: s.id })}
-                  className="min-w-0 flex-1 text-left text-sm hover:text-[--color-accent]"
+                  className="min-w-0 flex-1 text-left text-sm hover:text-accent"
                 >
                   <span className="block truncate">{s.name}</span>
-                  <span className="block text-xs text-[--color-muted]">
+                  <span className="block text-xs text-muted">
                     {s.code} · {s.setCode.toUpperCase()}
                   </span>
                 </button>

@@ -83,16 +83,16 @@ export function GradeScreen() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-[--color-muted]">
+        <div className="text-sm text-muted">
           Card {currentIndex + 1} of {cards.length}. Graded {gradedCount}.
         </div>
         {graders.length > 1 ? (
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-[--color-muted]">Follow</span>
+            <span className="text-muted">Follow</span>
             <select
               value={me?.followId ?? ''}
               onChange={(e) => setFollow(e.target.value || null)}
-              className="rounded border border-[--color-edge] bg-[--color-ink] px-2 py-1 text-sm"
+              className="rounded border border-edge bg-ink px-2 py-1 text-sm"
             >
               <option value="">Nobody</option>
               {graders
@@ -122,13 +122,13 @@ export function GradeScreen() {
           onChange={(g) => setGrade(card.id, { grade: g })}
         />
 
-        <div className="space-y-3 border-t border-[--color-edge] pt-4">
+        <div className="space-y-3 border-t border-edge pt-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={myGrade?.isBuildaround ?? false}
               onChange={(e) => setGrade(card.id, { isBuildaround: e.target.checked })}
-              className="h-4 w-4 accent-[--color-accent]"
+              className="h-4 w-4 accent-accent"
             />
             Build-around card
           </label>
@@ -155,7 +155,7 @@ export function GradeScreen() {
           Previous
         </Button>
 
-        <div className="text-center text-xs text-[--color-muted]">
+        <div className="text-center text-xs text-muted">
           {hasGrade ? null : 'Assign a grade to continue.'}
         </div>
 
@@ -164,7 +164,7 @@ export function GradeScreen() {
             Next
           </Button>
         ) : hasGrade && currentIndex === cards.length - 1 ? (
-          <span className="text-sm text-[--color-muted]">Last card.</span>
+          <span className="text-sm text-muted">Last card.</span>
         ) : (
           // Reserve the slot so the layout does not jump when Next appears.
           <span className="invisible">
@@ -220,8 +220,8 @@ function NotesBox({
   }
 
   return (
-    <div className="border-t border-[--color-edge] pt-4">
-      <div className="mb-1.5 text-xs uppercase tracking-wide text-[--color-muted]">
+    <div className="border-t border-edge pt-4">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted">
         Notes
       </div>
       <textarea
@@ -230,7 +230,7 @@ function NotesBox({
         onBlur={onBlur}
         rows={3}
         placeholder="Your notes on this card."
-        className="w-full resize-y rounded border border-[--color-edge] bg-[--color-ink] px-3 py-2 text-sm placeholder:text-[--color-muted]"
+        className="w-full resize-y rounded border border-edge bg-ink px-3 py-2 text-sm placeholder:text-muted"
       />
     </div>
   )

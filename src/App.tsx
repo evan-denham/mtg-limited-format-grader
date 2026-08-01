@@ -58,7 +58,7 @@ export default function App() {
       <Shell>
         <div className="mx-auto max-w-md space-y-4">
           <Notice tone="error">{error}</Notice>
-          <a href="#/" className="text-sm text-[--color-accent]">
+          <a href="#/" className="text-sm text-accent">
             Back to start
           </a>
         </div>
@@ -109,15 +109,15 @@ function Shell({
 
   return (
     <div className="min-h-full">
-      <header className="border-b border-[--color-edge] bg-[--color-panel]">
+      <header className="border-b border-edge bg-panel">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <a href="#/" className="text-sm font-medium hover:text-[--color-accent]">
+          <a href="#/" className="text-sm font-medium hover:text-accent">
             Limited Format Grader
           </a>
           {session ? (
             <>
-              <span className="text-sm text-[--color-muted]">{session.name}</span>
-              <span className="rounded border border-[--color-edge] px-2 py-0.5 font-mono text-xs text-[--color-muted]">
+              <span className="text-sm text-muted">{session.name}</span>
+              <span className="rounded border border-edge px-2 py-0.5 font-mono text-xs text-muted">
                 {session.code}
               </span>
             </>
@@ -143,7 +143,7 @@ function Shell({
                 localStorage.removeItem(`mtglfg.identity.${session.id}`)
                 window.location.reload()
               }}
-              className="text-xs text-[--color-muted] hover:text-[--color-text]"
+              className="text-xs text-muted hover:text-text"
               title="Switch grader"
             >
               {me.name}
@@ -175,8 +175,8 @@ function Tab({
       className={
         'rounded px-3 py-1.5 text-sm transition-colors ' +
         (active
-          ? 'bg-[--color-ink] text-[--color-text]'
-          : 'text-[--color-muted] hover:text-[--color-text]')
+          ? 'bg-ink text-text'
+          : 'text-muted hover:text-text')
       }
     >
       {children}

@@ -114,6 +114,27 @@ describe('orderCards', () => {
     expect(out.map((c) => c.section)).toEqual(['soa', 'main'])
   })
 
+  it('set-number mode walks collector order, ignoring colour and rarity', () => {
+    const out = orderCards(pool, settings({ mode: 'set-number' }))
+    expect(out.map((c) => c.collectorSort)).toEqual([1, 2, 5, 9])
+    // W rare (cn 1) must come before W common (cn 5) despite rarity order.
+    expect(out[0].name).toBe('W rare')
+  })
+
+  it('set-number mode still keeps sections separate', () => {
+    const main = card({ name: 'Main', section: 'main', collectorSort: 99 })
+    const bonus = card({ name: 'Bonus', section: 'soa', collectorSort: 1 })
+    const out = orderCards([bonus, main], settings({ mode: 'set-number', sectionOrder: ['main', 'soa'] }))
+    expect(out.map((c) => c.section)).toEqual(['main', 'soa'])
+  })
+
+  it('set-number mode falls back to the raw number then name for identical sort values', () => {
+    const a = card({ name: 'Beta', collectorSort: 12, collectorNumber: '12b' })
+    const b = card({ name: 'Alpha', collectorSort: 12, collectorNumber: '12a' })
+    const out = orderCards([a, b], settings({ mode: 'set-number' }))
+    expect(out.map((c) => c.collectorNumber)).toEqual(['12a', '12b'])
+  })
+
   it('does not drop cards whose bucket or rarity is missing from the order lists', () => {
     const odd = card({ name: 'Odd', bucket: 'X' as Bucket, rarity: 'weird' as Rarity })
     const out = orderCards([...pool, odd], settings())

@@ -4,7 +4,10 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // "node" is here for test files only (they read source off disk to assert
+    // on it). Application code must not import Node built-ins; it runs in a
+    // browser.
+    "types": ["vite/client", "node"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

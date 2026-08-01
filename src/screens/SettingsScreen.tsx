@@ -1,9 +1,9 @@
 /** Shared order settings plus session details. Changes sync to every grader. */
 
 import { useState } from 'react'
-import { Button, Field, Input, Notice, Panel } from '../components/ui'
+import { Button, Field, Input, Notice, Panel, Select } from '../components/ui'
 import { formatColorOrder, parseColorOrder, RARITY_LABELS } from '../domain/ordering'
-import type { GradingSettings } from '../domain/types'
+import { ORDER_MODE_LABELS, type GradingSettings } from '../domain/types'
 import { useSession } from '../store/session'
 import { isBackendConfigured } from '../supabase/client'
 
@@ -43,20 +43,26 @@ export function SettingsScreen() {
 
       <Panel className="space-y-4">
         <div className="text-sm">Grading order</div>
-        <p className="text-xs text-[--color-muted]">
+        <p className="text-xs text-muted">
           Order is shared. Changing it reorders the queue for every grader but keeps each
           grader on the card they are currently viewing.
         </p>
 
-        <Field label="Mode">
-          <select
+        <Field
+          label="Mode"
+          hint="Set number walks the set exactly as printed and ignores colour and rarity."
+        >
+          <Select
             value={s.mode}
             onChange={(e) => updateSettings({ mode: e.target.value as GradingSettings['mode'] })}
-            className="w-full rounded border border-[--color-edge] bg-[--color-ink] px-3 py-2 text-sm"
+            className="w-full"
           >
-            <option value="color-first">Colour, then rarity</option>
-            <option value="rarity-first">Rarity, then colour</option>
-          </select>
+            {Object.entries(ORDER_MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         <Field
@@ -74,27 +80,27 @@ export function SettingsScreen() {
             </Button>
           </div>
         </Field>
-        <div className="text-xs text-[--color-muted]">
+        <div className="text-xs text-muted">
           Currently: {formatColorOrder(s.colorOrder)}
         </div>
 
         <Field label="Rarity order">
-          <div className="text-sm text-[--color-muted]">
+          <div className="text-sm text-muted">
             {s.rarityOrder.map((r) => RARITY_LABELS[r] ?? r).join(' → ')}
           </div>
         </Field>
 
-        <Field label="Tiebreak">
-          <select
+        <Field label="Tiebreak" hint="Not used in set number mode.">
+          <Select
             value={s.tiebreak}
             onChange={(e) =>
               updateSettings({ tiebreak: e.target.value as GradingSettings['tiebreak'] })
             }
-            className="w-full rounded border border-[--color-edge] bg-[--color-ink] px-3 py-2 text-sm"
+            className="w-full"
           >
             <option value="collector">Collector number</option>
             <option value="name">Name</option>
-          </select>
+          </Select>
         </Field>
 
         <Field label="Section order" hint="Drag is not supported; use the buttons.">
@@ -125,16 +131,16 @@ export function SettingsScreen() {
       <Panel className="space-y-4">
         <div className="text-sm">Card display</div>
         <Field label="Show">
-          <select
+          <Select
             value={s.cardDisplay}
             onChange={(e) =>
               updateSettings({ cardDisplay: e.target.value as GradingSettings['cardDisplay'] })
             }
-            className="w-full rounded border border-[--color-edge] bg-[--color-ink] px-3 py-2 text-sm"
+            className="w-full"
           >
             <option value="full">Full card image</option>
             <option value="art">Art only</option>
-          </select>
+          </Select>
         </Field>
       </Panel>
 
@@ -158,7 +164,7 @@ function move(list: string[], index: number, delta: number): string[] {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 text-sm">
-      <span className="text-[--color-muted]">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className="text-right">{value}</span>
     </div>
   )

@@ -80,8 +80,8 @@ async function verifySet(code: string, expectFallback: boolean) {
     }
   }
 
-  // Ordering must cover every card exactly once, in both modes.
-  for (const mode of ['color-first', 'rarity-first'] as const) {
+  // Ordering must cover every card exactly once, in every mode.
+  for (const mode of ['color-first', 'rarity-first', 'set-number'] as const) {
     const settings = {
       ...DEFAULT_SETTINGS,
       mode,

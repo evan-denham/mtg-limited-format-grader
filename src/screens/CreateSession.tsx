@@ -1,9 +1,9 @@
 /** Session creation: set code, bonus sheets, graders, order. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Field, Input, Notice, Panel, Spinner } from '../components/ui'
+import { Button, Field, Input, Notice, Panel, Select, Spinner } from '../components/ui'
 import { DEFAULT_SETTINGS, formatColorOrder, parseColorOrder, sectionsInPool } from '../domain/ordering'
-import type { BonusSet, CardRecord, GradingSettings, Grader, SessionMeta } from '../domain/types'
+import { ORDER_MODE_LABELS, type BonusSet, type CardRecord, type GradingSettings, type Grader, type SessionMeta } from '../domain/types'
 import { ScryfallError, type RawSet } from '../scryfall/api'
 import { buildPool, detectBonusSheets, validateSet, type BonusRequest, type PoolReport } from '../scryfall/pool'
 import { generateSessionCode } from '../supabase/pin'
@@ -205,13 +205,13 @@ export function CreateSession() {
         <Panel className="space-y-4">
           <div className="text-sm">Bonus sheets</div>
           {bonus.length === 0 ? (
-            <p className="text-sm text-[--color-muted]">
+            <p className="text-sm text-muted">
               No bonus sheet found for this set. Add one below if it has one.
             </p>
           ) : (
             <div className="space-y-3">
               {bonus.map((b, i) => (
-                <div key={b.code} className="space-y-2 rounded border border-[--color-edge] p-3">
+                <div key={b.code} className="space-y-2 rounded border border-edge p-3">
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -221,12 +221,12 @@ export function CreateSession() {
                           list.map((x, j) => (j === i ? { ...x, selected: e.target.checked } : x)),
                         )
                       }
-                      className="h-4 w-4 accent-[--color-accent]"
+                      className="h-4 w-4 accent-accent"
                     />
                     {b.name} ({b.code.toUpperCase()})
                   </label>
                   {b.selected ? (
-                    <div className="flex items-center gap-2 pl-6 text-xs text-[--color-muted]">
+                    <div className="flex items-center gap-2 pl-6 text-xs text-muted">
                       <span>Collector numbers</span>
                       <Input
                         value={b.from}
@@ -301,16 +301,19 @@ export function CreateSession() {
       <Panel className="space-y-4">
         <div className="text-sm">Order</div>
         <Field label="Mode">
-          <select
+          <Select
             value={settings.mode}
             onChange={(e) =>
               setSettings((s) => ({ ...s, mode: e.target.value as GradingSettings['mode'] }))
             }
-            className="w-full rounded border border-[--color-edge] bg-[--color-ink] px-3 py-2 text-sm"
+            className="w-full"
           >
-            <option value="color-first">Colour, then rarity</option>
-            <option value="rarity-first">Rarity, then colour</option>
-          </select>
+            {Object.entries(ORDER_MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field
           label="Colour order"

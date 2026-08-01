@@ -48,7 +48,7 @@ export function PickGrader() {
     <div className="mx-auto max-w-md space-y-6">
       <div>
         <h1 className="text-xl">Who is grading?</h1>
-        <p className="mt-1 text-sm text-[--color-muted]">
+        <p className="mt-1 text-sm text-muted">
           Pick your name. Your grades and notes are stored against it.
         </p>
       </div>
@@ -65,8 +65,8 @@ export function PickGrader() {
             className={
               'w-full rounded border px-3 py-2 text-left text-sm transition-colors ' +
               (selected === g.id
-                ? 'border-[--color-accent]'
-                : 'border-[--color-edge] hover:border-[--color-muted]')
+                ? 'border-accent'
+                : 'border-edge hover:border-muted')
             }
           >
             {g.name}

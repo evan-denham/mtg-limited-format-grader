@@ -56,6 +56,13 @@ function compare(a: CardRecord, b: CardRecord, ctx: SortContext): number {
   const section = rankIn(sectionOrder, a.section) - rankIn(sectionOrder, b.section)
   if (section !== 0) return section
 
+  // Set-number mode deliberately skips the colour and rarity axes: the point
+  // is to walk the set exactly as printed.
+  if (settings.mode === 'set-number') {
+    if (a.collectorSort !== b.collectorSort) return a.collectorSort - b.collectorSort
+    return a.collectorNumber.localeCompare(b.collectorNumber) || a.name.localeCompare(b.name)
+  }
+
   const color = rankIn(settings.colorOrder, a.bucket) - rankIn(settings.colorOrder, b.bucket)
   const rarity = rankIn(settings.rarityOrder, a.rarity) - rankIn(settings.rarityOrder, b.rarity)
 

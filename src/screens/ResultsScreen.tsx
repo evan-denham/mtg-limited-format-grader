@@ -1,10 +1,17 @@
-/** All cards with their grades. Combined by default. */
+/** All cards with their grades.
+ *
+ *  Defaults to the session's grading order so the results read in the same
+ *  sequence the cards were graded in. Three layouts: a dense table, a card
+ *  gallery showing image and grade, and a gallery that adds the rules text.
+ */
 
 import { useMemo, useState } from 'react'
-import { Button, Notice, Panel } from '../components/ui'
-import { combine, isContentious } from '../domain/grades'
-import { RARITY_LABELS } from '../domain/ordering'
-import { BUCKET_LABELS, type CardRecord } from '../domain/types'
+import { CardImage } from '../components/CardView'
+import { GradeBadge } from '../components/GradeScale'
+import { Button, Notice, Panel, SegmentedControl, Select } from '../components/ui'
+import { combine, isContentious, type Combined } from '../domain/grades'
+import { orderCards, RARITY_LABELS } from '../domain/ordering'
+import { BUCKET_LABELS, type CardRecord, type Grade } from '../domain/types'
 import { gradeKey, useSession } from '../store/session'
 import {
   download,
@@ -15,8 +22,28 @@ import {
   type ExportInput,
 } from '../export/exporters'
 
-type SortKey = 'name' | 'grade' | 'rarity' | 'colour' | 'spread'
-type View = 'combined' | 'both' | 'graders'
+/** 'grading' means whatever order the session is set to grade in. */
+type SortKey = 'grading' | 'name' | 'grade' | 'rarity' | 'colour' | 'spread' | 'setNumber'
+type Layout = 'table' | 'cards' | 'cards-text'
+type GraderView = 'combined' | 'both' | 'graders'
+
+interface Row {
+  card: CardRecord
+  all: (Grade | null)[]
+  main: Combined
+  ba: Combined
+  baVotes: number
+}
+
+const SORT_LABELS: Record<SortKey, string> = {
+  grading: 'Grading order',
+  name: 'Name',
+  setNumber: 'Set number',
+  grade: 'Combined grade',
+  spread: 'Disagreement',
+  colour: 'Colour',
+  rarity: 'Rarity',
+}
 
 export function ResultsScreen() {
   const meta = useSession((s) => s.meta)
@@ -24,21 +51,32 @@ export function ResultsScreen() {
   const graders = useSession((s) => s.graders)
   const grades = useSession((s) => s.grades)
 
-  const [sort, setSort] = useState<SortKey>('name')
+  const [sort, setSort] = useState<SortKey>('grading')
   const [asc, setAsc] = useState(true)
-  const [view, setView] = useState<View>('combined')
-  const [section, setSection] = useState<string>('all')
+  const [layout, setLayout] = useState<Layout>('table')
+  const [graderView, setGraderView] = useState<GraderView>('combined')
+  const [section, setSection] = useState('all')
   const [onlyGraded, setOnlyGraded] = useState(false)
 
-  const rows = useMemo(() => {
-    const built = cards.map((card) => {
+  const rows = useMemo<Row[]>(() => {
+    if (!meta) return []
+
+    // Start from the shared grading order so 'grading' needs no extra work and
+    // every other sort is applied on top of a stable, meaningful base.
+    const ordered = orderCards(cards, meta.settings)
+    const gradingRank = new Map(ordered.map((c, i) => [c.id, i]))
+
+    const built = ordered.map((card): Row => {
       const all = graders.map((g) => grades[gradeKey(g.id, card.id)] ?? null)
       const main = combine(all.map((g) => g?.grade ?? null))
-      const baVotes = all.filter((g) => g?.isBuildaround).length
-      const ba = combine(
-        all.filter((g) => g?.isBuildaround).map((g) => g?.buildaroundGrade ?? null),
-      )
-      return { card, all, main, ba, baVotes }
+      const flagged = all.filter((g) => g?.isBuildaround)
+      return {
+        card,
+        all,
+        main,
+        ba: combine(flagged.map((g) => g?.buildaroundGrade ?? null)),
+        baVotes: flagged.length,
+      }
     })
 
     const filtered = built
@@ -48,8 +86,12 @@ export function ResultsScreen() {
     const dir = asc ? 1 : -1
     return filtered.sort((a, b) => {
       switch (sort) {
+        case 'grading':
+          return ((gradingRank.get(a.card.id) ?? 0) - (gradingRank.get(b.card.id) ?? 0)) * dir
+        case 'setNumber':
+          return (a.card.collectorSort - b.card.collectorSort) * dir
         case 'grade':
-          // Ungraded sorts last in both directions rather than pretending to be F.
+          // Ungraded sorts last in both directions rather than posing as F.
           if (a.main.mean == null && b.main.mean == null) return 0
           if (a.main.mean == null) return 1
           if (b.main.mean == null) return -1
@@ -64,7 +106,7 @@ export function ResultsScreen() {
           return a.card.name.localeCompare(b.card.name) * dir
       }
     })
-  }, [cards, graders, grades, sort, asc, section, onlyGraded])
+  }, [meta, cards, graders, grades, sort, asc, section, onlyGraded])
 
   if (!meta) return null
 
@@ -73,43 +115,83 @@ export function ResultsScreen() {
   const gradedTotal = cards.filter((c) =>
     graders.some((g) => grades[gradeKey(g.id, c.id)]?.grade),
   ).length
-
   const sections = ['all', ...new Set(cards.map((c) => c.section))]
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-[--color-muted]">
-          {gradedTotal} of {cards.length} cards have at least one grade.
-        </span>
+      <div className="text-sm text-muted">
+        {gradedTotal} of {cards.length} cards have at least one grade.
       </div>
 
-      <Panel className="flex flex-wrap items-end gap-3">
-        <Select label="View" value={view} onChange={(v) => setView(v as View)}>
-          <option value="combined">Combined</option>
-          <option value="both">Combined and graders</option>
-          <option value="graders">Graders only</option>
-        </Select>
-
-        <Select label="Section" value={section} onChange={setSection}>
-          {sections.map((s) => (
-            <option key={s} value={s}>
-              {s === 'all' ? 'All' : s === 'main' ? 'Main set' : s.toUpperCase()}
-            </option>
-          ))}
-        </Select>
-
-        <label className="flex items-center gap-2 pb-2 text-sm">
-          <input
-            type="checkbox"
-            checked={onlyGraded}
-            onChange={(e) => setOnlyGraded(e.target.checked)}
-            className="h-4 w-4 accent-[--color-accent]"
+      <Panel className="space-y-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <SegmentedControl
+            label="Layout"
+            value={layout}
+            onChange={setLayout}
+            options={[
+              { value: 'table', label: 'Table' },
+              { value: 'cards', label: 'Cards' },
+              { value: 'cards-text', label: 'Cards and text' },
+            ]}
           />
-          Graded only
-        </label>
 
-        <div className="ml-auto flex flex-wrap gap-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+              Sort
+            </span>
+            <div className="flex gap-2">
+              <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                {Object.entries(SORT_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </Select>
+              <Button onClick={() => setAsc((a) => !a)} title="Reverse sort direction">
+                {asc ? 'Ascending' : 'Descending'}
+              </Button>
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+              Section
+            </span>
+            <Select value={section} onChange={(e) => setSection(e.target.value)}>
+              {sections.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'all' ? 'All' : s === 'main' ? 'Main set' : s.toUpperCase()}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          {layout === 'table' ? (
+            <SegmentedControl
+              label="Grades"
+              value={graderView}
+              onChange={setGraderView}
+              options={[
+                { value: 'combined', label: 'Combined' },
+                { value: 'both', label: 'Both' },
+                { value: 'graders', label: 'Per grader' },
+              ]}
+            />
+          ) : null}
+
+          <label className="flex items-center gap-2 pb-2 text-sm">
+            <input
+              type="checkbox"
+              checked={onlyGraded}
+              onChange={(e) => setOnlyGraded(e.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            Graded only
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-2 border-t border-edge pt-4">
           <Button onClick={() => download(`${base}.csv`, toCsv(exportInput), 'text/csv')}>
             Export CSV
           </Button>
@@ -120,122 +202,199 @@ export function ResultsScreen() {
           >
             Export card sheet
           </Button>
-          <Button
-            onClick={() => download(`${base}.json`, toJson(exportInput), 'application/json')}
-          >
+          <Button onClick={() => download(`${base}.json`, toJson(exportInput), 'application/json')}>
             Export JSON
           </Button>
         </div>
       </Panel>
 
-      {cards.length === 0 ? <Notice>No cards in this session.</Notice> : null}
-
-      <div className="overflow-x-auto rounded border border-[--color-edge]">
-        <table className="w-full min-w-max text-sm">
-          <thead className="bg-[--color-panel] text-left text-xs uppercase tracking-wide text-[--color-muted]">
-            <tr>
-              <Th onClick={() => toggle('name')} active={sort === 'name'} asc={asc}>
-                Card
-              </Th>
-              <Th onClick={() => toggle('colour')} active={sort === 'colour'} asc={asc}>
-                Colour
-              </Th>
-              <Th onClick={() => toggle('rarity')} active={sort === 'rarity'} asc={asc}>
-                Rarity
-              </Th>
-              {view !== 'graders' ? (
-                <>
-                  <Th onClick={() => toggle('grade')} active={sort === 'grade'} asc={asc}>
-                    Combined
-                  </Th>
-                  <Th onClick={() => toggle('spread')} active={sort === 'spread'} asc={asc}>
-                    Spread
-                  </Th>
-                </>
-              ) : null}
-              {view !== 'combined'
-                ? graders.map((g) => (
-                    <th key={g.id} className="px-3 py-2 font-normal">
-                      {g.name}
-                    </th>
-                  ))
-                : null}
-              <th className="px-3 py-2 font-normal">Build-around</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ card, all, main, ba, baVotes }) => (
-              <tr key={card.id} className="border-t border-[--color-edge] align-top">
-                <td className="px-3 py-2">
-                  <div>{card.name}</div>
-                  {card.section !== 'main' ? (
-                    <div className="text-xs text-[--color-muted]">
-                      {card.section.toUpperCase()}
-                    </div>
-                  ) : null}
-                  <Notes cardId={card.id} />
-                </td>
-                <td className="px-3 py-2 text-[--color-muted]">
-                  {BUCKET_LABELS[card.bucket] ?? card.bucket}
-                </td>
-                <td className="px-3 py-2 text-[--color-muted]">
-                  {RARITY_LABELS[card.rarity] ?? card.rarity}
-                </td>
-                {view !== 'graders' ? (
-                  <>
-                    <td className="px-3 py-2 font-mono">
-                      {main.letter ?? '—'}
-                      {main.mean != null ? (
-                        <span className="ml-2 text-xs text-[--color-muted]">
-                          {main.mean.toFixed(2)}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 font-mono">
-                      {main.count > 1 ? (
-                        <span className={isContentious(main) ? 'text-[#d8bd82]' : ''}>
-                          {main.spread}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </>
-                ) : null}
-                {view !== 'combined'
-                  ? all.map((g, i) => (
-                      <td key={graders[i].id} className="px-3 py-2 font-mono">
-                        {g?.grade ?? '—'}
-                      </td>
-                    ))
-                  : null}
-                <td className="px-3 py-2 font-mono">
-                  {baVotes > 0 ? (
-                    <span>
-                      {ba.letter ?? '—'}
-                      <span className="ml-2 text-xs text-[--color-muted]">
-                        {baVotes}/{graders.length}
-                      </span>
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {rows.length === 0 ? (
+        <Notice>No cards match the current filters.</Notice>
+      ) : layout === 'table' ? (
+        <ResultsTable rows={rows} graderView={graderView} />
+      ) : (
+        <CardGallery rows={rows} withText={layout === 'cards-text'} />
+      )}
     </div>
   )
+}
 
-  function toggle(k: SortKey) {
-    if (sort === k) setAsc((a) => !a)
-    else {
-      setSort(k)
-      setAsc(true)
-    }
-  }
+function CardGallery({ rows, withText }: { rows: Row[]; withText: boolean }) {
+  const graders = useSession((s) => s.graders)
+
+  return (
+    <div
+      className={
+        withText
+          ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'
+          : 'grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+      }
+    >
+      {rows.map(({ card, all, main, ba, baVotes }) => (
+        <div
+          key={card.id}
+          className={
+            'rounded-lg border border-edge bg-panel p-3 transition-colors hover:border-edge-strong ' +
+            (withText ? 'flex gap-3' : '')
+          }
+        >
+          <div className={withText ? 'w-32 shrink-0' : ''}>
+            <CardImage src={card.faces[0]?.imageNormal ?? null} alt={card.name} />
+          </div>
+
+          <div className={withText ? 'min-w-0 flex-1' : 'mt-2'}>
+            <div className={withText ? 'flex items-start justify-between gap-2' : 'flex items-center justify-between gap-2'}>
+              <span className="min-w-0 truncate text-sm" title={card.name}>
+                {card.name}
+              </span>
+              <GradeBadge grade={main.letter} size={withText ? 'normal' : 'large'} />
+            </div>
+
+            <div className="mt-1 text-xs text-muted">
+              {BUCKET_LABELS[card.bucket] ?? card.bucket} ·{' '}
+              {RARITY_LABELS[card.rarity] ?? card.rarity} · {card.collectorNumber}
+              {main.mean != null ? ` · ${main.mean.toFixed(2)}` : ''}
+            </div>
+
+            {baVotes > 0 ? (
+              <div className="mt-1 text-xs text-warn">
+                Build-around {ba.letter ?? '—'} ({baVotes}/{graders.length})
+              </div>
+            ) : null}
+
+            {isContentious(main) ? (
+              <div className="mt-1 text-xs text-warn">Disagreement: {main.spread} steps</div>
+            ) : null}
+
+            {withText ? (
+              <div className="mt-2 space-y-1 text-xs leading-relaxed text-muted">
+                <div className="text-text">{card.faces[0]?.typeLine}</div>
+                {(card.faces[0]?.oracleText ?? '').split('\n').map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+                {card.faces.length > 1
+                  ? card.faces.slice(1).map((f, i) => (
+                      <div key={i} className="border-t border-edge pt-1">
+                        <div className="text-text">{f.name}</div>
+                        <div>{f.oracleText}</div>
+                      </div>
+                    ))
+                  : null}
+              </div>
+            ) : null}
+
+            {graders.length > 1 ? (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {all.map((g, i) =>
+                  g?.grade ? (
+                    <span
+                      key={graders[i].id}
+                      className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted"
+                      title={graders[i].name}
+                    >
+                      {graders[i].name.slice(0, 1)} {g.grade}
+                    </span>
+                  ) : null,
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ResultsTable({ rows, graderView }: { rows: Row[]; graderView: GraderView }) {
+  const graders = useSession((s) => s.graders)
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-edge">
+      <table className="w-full min-w-max text-sm">
+        <thead className="bg-panel text-left text-xs uppercase tracking-wide text-muted">
+          <tr>
+            <th className="px-3 py-2 font-medium">Card</th>
+            <th className="px-3 py-2 font-medium">Colour</th>
+            <th className="px-3 py-2 font-medium">Rarity</th>
+            <th className="px-3 py-2 font-medium">No.</th>
+            {graderView !== 'graders' ? (
+              <>
+                <th className="px-3 py-2 font-medium">Combined</th>
+                <th className="px-3 py-2 font-medium">Spread</th>
+              </>
+            ) : null}
+            {graderView !== 'combined'
+              ? graders.map((g) => (
+                  <th key={g.id} className="px-3 py-2 font-medium">
+                    {g.name}
+                  </th>
+                ))
+              : null}
+            <th className="px-3 py-2 font-medium">Build-around</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ card, all, main, ba, baVotes }) => (
+            <tr
+              key={card.id}
+              className="border-t border-edge align-top transition-colors hover:bg-panel"
+            >
+              <td className="px-3 py-2">
+                <div>{card.name}</div>
+                {card.section !== 'main' ? (
+                  <div className="text-xs text-muted">{card.section.toUpperCase()}</div>
+                ) : null}
+                <Notes cardId={card.id} />
+              </td>
+              <td className="px-3 py-2 text-muted">{BUCKET_LABELS[card.bucket] ?? card.bucket}</td>
+              <td className="px-3 py-2 text-muted">{RARITY_LABELS[card.rarity] ?? card.rarity}</td>
+              <td className="px-3 py-2 font-mono text-muted">{card.collectorNumber}</td>
+              {graderView !== 'graders' ? (
+                <>
+                  <td className="px-3 py-2">
+                    <GradeBadge grade={main.letter} />
+                    {main.mean != null ? (
+                      <span className="ml-2 font-mono text-xs text-muted">
+                        {main.mean.toFixed(2)}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    {main.count > 1 ? (
+                      <span className={isContentious(main) ? 'font-semibold text-warn' : ''}>
+                        {main.spread}
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                </>
+              ) : null}
+              {graderView !== 'combined'
+                ? all.map((g, i) => (
+                    <td key={graders[i].id} className="px-3 py-2 font-mono">
+                      {g?.grade ?? <span className="text-muted">—</span>}
+                    </td>
+                  ))
+                : null}
+              <td className="px-3 py-2 font-mono">
+                {baVotes > 0 ? (
+                  <span>
+                    {ba.letter ?? '—'}
+                    <span className="ml-2 text-xs text-muted">
+                      {baVotes}/{graders.length}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function Notes({ cardId }: { cardId: string }) {
@@ -248,66 +407,16 @@ function Notes({ cardId }: { cardId: string }) {
   if (withNotes.length === 0) return null
   return (
     <details className="mt-1">
-      <summary className="cursor-pointer text-xs text-[--color-muted]">
+      <summary className="cursor-pointer text-xs text-muted hover:text-text">
         Notes ({withNotes.length})
       </summary>
-      <ul className="mt-1 space-y-1 text-xs text-[--color-muted]">
+      <ul className="mt-1 space-y-1 text-xs text-muted">
         {withNotes.map(({ g, note }) => (
           <li key={g.id}>
-            <span className="text-[--color-text]">{g.name}:</span> {note}
+            <span className="text-text">{g.name}:</span> {note}
           </li>
         ))}
       </ul>
     </details>
   )
 }
-
-function Th({
-  children,
-  onClick,
-  active,
-  asc,
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  active: boolean
-  asc: boolean
-}) {
-  return (
-    <th className="px-3 py-2 font-normal">
-      <button onClick={onClick} className="hover:text-[--color-text]">
-        {children}
-        {active ? <span className="ml-1">{asc ? '↑' : '↓'}</span> : null}
-      </button>
-    </th>
-  )
-}
-
-function Select({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  children: React.ReactNode
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs uppercase tracking-wide text-[--color-muted]">
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded border border-[--color-edge] bg-[--color-ink] px-2 py-2 text-sm"
-      >
-        {children}
-      </select>
-    </label>
-  )
-}
-
-export type { CardRecord }

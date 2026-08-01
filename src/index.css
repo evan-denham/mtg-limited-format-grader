@@ -1,12 +1,28 @@
 @import 'tailwindcss';
 
+/* Tokens defined here generate utilities: --color-panel gives bg-panel,
+   text-panel, border-panel, and so on.
+   Do NOT write bg-[--color-panel]. Tailwind v4 removed the v3 shorthand that
+   wrapped a bare custom property in var(), so that emits the invalid
+   declaration `background-color: --color-panel` and the browser drops it. */
+/* Values are chosen against WCAG, not by eye. --color-edge carries the visible
+   boundary of every button and input, so it must clear 3:1 (SC 1.4.11) against
+   BOTH --color-panel and --color-ink, since controls sit on either. Measured:
+   edge/panel 3.22:1, edge/ink 3.65:1, text/ink 16.7:1, muted/panel 6.3:1,
+   black-on-accent 7.6:1. Darkening --color-edge breaks the control boundary. */
 @theme {
-  --color-ink: #0d0f12;
-  --color-panel: #16191f;
-  --color-edge: #262b33;
-  --color-muted: #8b929e;
-  --color-text: #e7e9ec;
-  --color-accent: #c8a15a;
+  --color-ink: #0f1115;
+  --color-panel: #1a1e26;
+  --color-raised: #2b323f;
+  --color-raised-hover: #3a4354;
+  --color-edge: #5f6e85;
+  --color-edge-strong: #8593a8;
+  --color-text: #eef1f6;
+  --color-muted: #94a0b3;
+  --color-accent: #4a9eff;
+  --color-accent-hover: #6bb0ff;
+  --color-warn: #e0a938;
+  --color-danger: #ff6b6b;
 }
 
 html,
@@ -23,10 +39,20 @@ body {
   margin: 0;
 }
 
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Every interactive element gets a visible keyboard focus ring. */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -41,6 +67,45 @@ textarea:focus-visible {
 ::-webkit-scrollbar-thumb {
   background: var(--color-edge);
   border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-edge-strong);
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Skeleton placeholder used while a card image loads. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-panel);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.05),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {

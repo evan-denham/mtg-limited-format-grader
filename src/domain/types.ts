@@ -72,7 +72,15 @@ export interface BonusSet {
   name: string
 }
 
-export type OrderMode = 'color-first' | 'rarity-first'
+/** 'set-number' ignores colour and rarity entirely and walks the set in
+ *  printed collector-number order, which is how spoiler galleries are laid out. */
+export type OrderMode = 'color-first' | 'rarity-first' | 'set-number'
+
+export const ORDER_MODE_LABELS: Record<OrderMode, string> = {
+  'color-first': 'Colour, then rarity',
+  'rarity-first': 'Rarity, then colour',
+  'set-number': 'Set number',
+}
 
 export interface GradingSettings {
   mode: OrderMode
