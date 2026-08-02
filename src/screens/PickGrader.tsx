@@ -78,7 +78,7 @@ export function PickGrader() {
         <Panel className="space-y-4">
           <Field
             label={`PIN for ${grader.name}`}
-            hint="Four digits. Set on first use. Stops graders submitting as each other by accident; it is not a password."
+            hint="Type the pin you assigned at time of session generation to authenticate your login."
           >
             <Input
               value={pin}

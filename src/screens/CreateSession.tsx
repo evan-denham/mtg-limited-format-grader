@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS, formatColorOrder, parseColorOrder, sectionsInPool } f
 import { ORDER_MODE_LABELS, type BonusSet, type CardRecord, type GradingSettings, type Grader, type SessionMeta } from '../domain/types'
 import { ScryfallError, type RawSet } from '../scryfall/api'
 import { buildPool, detectBonusSheets, validateSet, type BonusRequest, type PoolReport } from '../scryfall/pool'
-import { generateSessionCode } from '../supabase/pin'
+import { generatePin, generateSessionCode, isValidPin } from '../supabase/pin'
 import { backend } from '../supabase/backend'
 import { isBackendConfigured } from '../supabase/client'
 import * as local from '../storage/local'
@@ -28,7 +28,10 @@ export function CreateSession() {
   const [bonus, setBonus] = useState<BonusChoice[]>([])
   const [manualCode, setManualCode] = useState('')
 
-  const [graderNames, setGraderNames] = useState<string[]>([''])
+  const [graderRows, setGraderRows] = useState<{ name: string; pin: string }[]>([
+    { name: '', pin: generatePin() },
+  ])
+  const [hostIndex, setHostIndex] = useState(0)
   const [settings, setSettings] = useState<GradingSettings>(DEFAULT_SETTINGS)
   const [colorText, setColorText] = useState(formatColorOrder(DEFAULT_SETTINGS.colorOrder))
 
@@ -86,9 +89,12 @@ export function CreateSession() {
     }
   }, [manualCode, bonus])
 
-  const names = graderNames.map((n) => n.trim()).filter(Boolean)
+  const filled = graderRows.filter((g) => g.name.trim())
+  const names = filled.map((g) => g.name.trim())
   const namesUnique = new Set(names.map((n) => n.toLowerCase())).size === names.length
-  const canCreate = Boolean(setInfo) && names.length > 0 && namesUnique && !building
+  const pinsValid = filled.every((g) => isValidPin(g.pin))
+  const canCreate =
+    Boolean(setInfo) && names.length > 0 && namesUnique && pinsValid && !building
 
   async function create() {
     if (!setInfo) return
@@ -128,8 +134,12 @@ export function CreateSession() {
       const code = generateSessionCode()
       const name = `${setInfo.name} review`
 
+      const newGraders = filled.map((g) => ({ name: g.name.trim(), pin: g.pin }))
+      const safeHostIndex = Math.min(hostIndex, newGraders.length - 1)
+
       let sessionId: string
       let graders: Grader[]
+      let hostGraderId: string | null
 
       const created = await backend.createSession({
         code,
@@ -139,22 +149,26 @@ export function CreateSession() {
         bonusSets: requests.map((r) => ({ code: r.code, name: r.name })),
         cards,
         settings: finalSettings,
-        graderNames: names,
+        graders: newGraders,
+        hostIndex: safeHostIndex,
       })
 
       if (created) {
         sessionId = created.sessionId
         graders = created.graders
+        hostGraderId = created.hostGraderId
       } else {
         // Local-only mode: mint ids client-side.
         sessionId = crypto.randomUUID()
-        graders = names.map((n, i) => ({
+        graders = newGraders.map((g, i) => ({
           id: crypto.randomUUID(),
-          name: n,
+          name: g.name,
           currentCardId: null,
           followId: null,
-          accent: ['#c8a15a', '#6aa9d6', '#c26b6b', '#7fb87f', '#a98ac9'][i % 5],
+          accent: ['#4a9eff', '#e0a938', '#ff6b6b', '#7fb87f', '#a98ac9'][i % 5],
+          pin: g.pin,
         }))
+        hostGraderId = graders[safeHostIndex]?.id ?? null
       }
 
       const meta: SessionMeta = {
@@ -165,6 +179,7 @@ export function CreateSession() {
         setName: setInfo.name,
         bonusSets: requests.map((r) => ({ code: r.code, name: r.name })),
         settings: finalSettings,
+        hostGraderId,
       }
 
       persistLocally(meta, cards, graders)
@@ -275,27 +290,79 @@ export function CreateSession() {
 
       <Panel className="space-y-4">
         <div className="text-sm">Graders</div>
-        {graderNames.map((n, i) => (
-          <div key={i} className="flex gap-2">
-            <Input
-              value={n}
-              onChange={(e) =>
-                setGraderNames((list) => list.map((x, j) => (j === i ? e.target.value : x)))
-              }
-              placeholder={`Grader ${i + 1}`}
-            />
-            {graderNames.length > 1 ? (
+        <p className="text-xs text-muted">
+          Assign each grader a four-digit PIN now and tell them what it is. You can look them
+          up again later in Settings. The PIN stops graders entering grades as each other by
+          accident; it is not a password, so do not reuse one that matters.
+        </p>
+
+        <div className="space-y-2">
+          {graderRows.map((row, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <Input
+                value={row.name}
+                onChange={(e) =>
+                  setGraderRows((l) =>
+                    l.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                  )
+                }
+                placeholder={`Grader ${i + 1}`}
+                className="min-w-40 flex-1"
+              />
+              <Input
+                value={row.pin}
+                onChange={(e) =>
+                  setGraderRows((l) =>
+                    l.map((x, j) =>
+                      j === i ? { ...x, pin: e.target.value.replace(/\D/g, '').slice(0, 4) } : x,
+                    ),
+                  )
+                }
+                inputMode="numeric"
+                placeholder="PIN"
+                className="w-24 font-mono"
+              />
               <Button
-                variant="danger"
-                onClick={() => setGraderNames((l) => l.filter((_, j) => j !== i))}
+                onClick={() =>
+                  setGraderRows((l) =>
+                    l.map((x, j) => (j === i ? { ...x, pin: generatePin() } : x)),
+                  )
+                }
+                title="Generate a random PIN"
               >
-                Remove
+                Random
               </Button>
-            ) : null}
-          </div>
-        ))}
-        <Button onClick={() => setGraderNames((l) => [...l, ''])}>Add grader</Button>
+              <label className="flex items-center gap-1.5 text-xs text-muted">
+                <input
+                  type="radio"
+                  name="host"
+                  checked={hostIndex === i}
+                  onChange={() => setHostIndex(i)}
+                  className="h-3.5 w-3.5 accent-accent"
+                />
+                This is me
+              </label>
+              {graderRows.length > 1 ? (
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setGraderRows((l) => l.filter((_, j) => j !== i))
+                    setHostIndex((h) => (h >= i && h > 0 ? h - 1 : h))
+                  }}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <Button onClick={() => setGraderRows((l) => [...l, { name: '', pin: generatePin() }])}>
+          Add grader
+        </Button>
+
         {!namesUnique ? <Notice tone="error">Grader names must be different.</Notice> : null}
+        {!pinsValid ? <Notice tone="error">Every PIN must be exactly four digits.</Notice> : null}
       </Panel>
 
       <Panel className="space-y-4">

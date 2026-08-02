@@ -27,9 +27,9 @@ joined from another device.
 ## Enabling multi-device sync
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor -> New query**, paste
-   [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql),
-   and run it.
+2. Open **SQL Editor -> New query** and run each migration in
+   [`supabase/migrations/`](supabase/migrations/) in order:
+   `0001_init.sql`, then `0002_pins_and_delete.sql`.
 3. Copy `.env.example` to `.env.local` and fill in the values from
    **Project Settings -> API**:
    - `VITE_SUPABASE_URL`
@@ -46,10 +46,17 @@ longer than that, resume it from the Supabase dashboard.
 ## Security posture
 
 There is no authentication. **The session code is the credential:** anyone with
-it can read and write that session. The per-grader PIN is a salted SHA-256
-hash whose only job is stopping graders from submitting as each other by
-accident. It is not a security boundary, because the anon key can read the
-graders table.
+it can read and write that session.
+
+The host assigns each grader a four-digit PIN when creating the session and can
+look them up again under Settings. PINs are stored **in the clear**, because a
+host who cannot read a PIN back cannot remind anyone what theirs is. That gives
+up nothing: the anon key could always read the graders table, so hashing was
+never protecting anything here. The PIN's only job is stopping graders from
+entering grades as each other by accident. Do not reuse a PIN that means
+anything elsewhere.
+
+PINs are stripped from the JSON export, since that file gets mailed around.
 
 That is a deliberate trade for grading a set with friends. If it ever needs to
 be genuinely private, the upgrade is Supabase anonymous sign-in with policies

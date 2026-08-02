@@ -14,13 +14,17 @@ import type {
   SessionMeta,
 } from '../domain/types'
 import { isBackendConfigured, supabase } from './client'
-import { hashPin } from './pin'
 
 export interface LoadedSession {
   meta: SessionMeta
   cards: CardRecord[]
   graders: Grader[]
   grades: Grade[]
+}
+
+export interface NewGrader {
+  name: string
+  pin: string
 }
 
 export interface CreateSessionArgs {
@@ -31,12 +35,16 @@ export interface CreateSessionArgs {
   bonusSets: BonusSet[]
   cards: CardRecord[]
   settings: GradingSettings
-  graderNames: string[]
+  graders: NewGrader[]
+  /** Index into `graders` of the person creating the session. */
+  hostIndex: number
 }
 
 export interface Backend {
   readonly configured: boolean
-  createSession(args: CreateSessionArgs): Promise<{ sessionId: string; graders: Grader[] } | null>
+  createSession(
+    args: CreateSessionArgs,
+  ): Promise<{ sessionId: string; graders: Grader[]; hostGraderId: string } | null>
   loadSession(sessionId: string): Promise<LoadedSession | null>
   findSessionByCode(code: string): Promise<{ id: string } | null>
   saveGrade(sessionId: string, grade: Grade): Promise<void>
@@ -44,6 +52,7 @@ export interface Backend {
   saveFollow(sessionId: string, graderId: string, followId: string | null): Promise<void>
   saveSettings(sessionId: string, settings: GradingSettings): Promise<void>
   claimGrader(sessionId: string, graderId: string, pin: string): Promise<'ok' | 'wrong-pin'>
+  deleteSession(sessionId: string): Promise<void>
   subscribe(sessionId: string, handlers: RealtimeHandlers): () => void
 }
 
@@ -64,13 +73,14 @@ interface SessionRow {
   bonus_sets: BonusSet[]
   cards: CardRecord[]
   settings: GradingSettings
+  host_grader_id: string | null
 }
 
 interface GraderRow {
   id: string
   session_id: string
   name: string
-  pin_hash: string | null
+  pin: string | null
   current_card_id: string | null
   follow_id: string | null
   accent: string
@@ -92,6 +102,7 @@ const toGrader = (r: GraderRow): Grader => ({
   currentCardId: r.current_card_id,
   followId: r.follow_id,
   accent: r.accent,
+  pin: r.pin ?? null,
 })
 
 const toGrade = (r: GradeRow): Grade => ({
@@ -125,6 +136,7 @@ const localBackend: Backend = {
   async claimGrader() {
     return 'ok'
   },
+  async deleteSession() {},
   subscribe() {
     return () => {}
   },
@@ -159,16 +171,25 @@ function makeSupabaseBackend(): Backend {
       const { data: graderRows, error: gErr } = await db
         .from('graders')
         .insert(
-          args.graderNames.map((name, i) => ({
+          args.graders.map((g, i) => ({
             session_id: sessionId,
-            name,
+            name: g.name,
+            pin: g.pin,
             accent: ACCENTS[i % ACCENTS.length],
           })),
         )
         .select('*')
       if (gErr) throw new Error(`Could not add graders: ${gErr.message}`)
 
-      return { sessionId, graders: (graderRows as GraderRow[]).map(toGrader) }
+      // Insert order is not guaranteed to be returned order, so resolve the
+      // host by name rather than by position.
+      const graders = (graderRows as GraderRow[]).map(toGrader)
+      const hostName = args.graders[args.hostIndex]?.name
+      const hostGraderId = graders.find((g) => g.name === hostName)?.id ?? graders[0].id
+
+      await db.from('sessions').update({ host_grader_id: hostGraderId }).eq('id', sessionId)
+
+      return { sessionId, graders, hostGraderId }
     },
 
     async loadSession(sessionId) {
@@ -194,6 +215,7 @@ function makeSupabaseBackend(): Backend {
           setName: row.set_name,
           bonusSets: row.bonus_sets ?? [],
           settings: row.settings,
+          hostGraderId: row.host_grader_id ?? null,
         },
         cards: row.cards ?? [],
         graders: ((graders ?? []) as GraderRow[]).map(toGrader),
@@ -243,20 +265,22 @@ function makeSupabaseBackend(): Backend {
       await db.from('sessions').update({ settings }).eq('id', sessionId)
     },
 
-    async claimGrader(sessionId, graderId, pin) {
-      const hash = await hashPin(pin, sessionId)
-      const { data } = await db
-        .from('graders')
-        .select('pin_hash')
-        .eq('id', graderId)
-        .maybeSingle()
-      const existing = (data as { pin_hash: string | null } | null)?.pin_hash ?? null
+    async claimGrader(_sessionId, graderId, pin) {
+      const { data } = await db.from('graders').select('pin').eq('id', graderId).maybeSingle()
+      const existing = (data as { pin: string | null } | null)?.pin ?? null
 
+      // Sessions created before PINs were assigned up front have none set;
+      // the first person to claim the slot sets it.
       if (existing === null) {
-        await db.from('graders').update({ pin_hash: hash }).eq('id', graderId)
+        await db.from('graders').update({ pin }).eq('id', graderId)
         return 'ok'
       }
-      return existing === hash ? 'ok' : 'wrong-pin'
+      return existing === pin ? 'ok' : 'wrong-pin'
+    },
+
+    async deleteSession(sessionId) {
+      const { error } = await db.from('sessions').delete().eq('id', sessionId)
+      if (error) throw new Error(`Could not delete session: ${error.message}`)
     },
 
     subscribe(sessionId, handlers) {

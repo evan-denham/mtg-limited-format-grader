@@ -37,8 +37,8 @@ const card = (over: Partial<CardRecord> = {}): CardRecord => ({
 })
 
 const graders: Grader[] = [
-  { id: 'g1', name: 'Alice', currentCardId: null, followId: null, accent: '#fff' },
-  { id: 'g2', name: 'Bob', currentCardId: null, followId: null, accent: '#000' },
+  { id: 'g1', name: 'Alice', currentCardId: null, followId: null, accent: '#fff', pin: '1234' },
+  { id: 'g2', name: 'Bob', currentCardId: null, followId: null, accent: '#000', pin: '5678' },
 ]
 
 const grade = (over: Partial<Grade> & Pick<Grade, 'graderId' | 'cardId'>): Grade => ({
@@ -59,6 +59,7 @@ function input(over: Partial<ExportInput> = {}): ExportInput {
       setName: 'Lorwyn Eclipsed',
       bonusSets: [],
       settings: DEFAULT_SETTINGS,
+      hostGraderId: 'g1',
     },
     cards: [card()],
     graders,
@@ -171,6 +172,15 @@ describe('toPrintableHtml', () => {
 })
 
 describe('toJson', () => {
+  it('never includes grader PINs, which must not travel in an exported file', () => {
+    const json = toJson(input())
+    expect(json).not.toContain('1234')
+    expect(json).not.toContain('5678')
+    expect(json).not.toContain('"pin"')
+    // Sanity: the graders themselves are still present.
+    expect(JSON.parse(json).graders.map((g: { name: string }) => g.name)).toEqual(['Alice', 'Bob'])
+  })
+
   it('round-trips through JSON.parse with grades as an array', () => {
     const parsed = JSON.parse(
       toJson(input({ grades: { 'g1:c1': grade({ graderId: 'g1', cardId: 'c1', grade: 'A' }) } })),

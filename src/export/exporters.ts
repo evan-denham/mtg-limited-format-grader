@@ -86,7 +86,9 @@ export function toJson(input: ExportInput): string {
       version: 1,
       exportedAt: new Date().toISOString(),
       session: input.meta,
-      graders: input.graders,
+      // PINs are deliberately stripped. An export is a file people mail around
+      // and commit; there is no reason for a grader's PIN to travel with it.
+      graders: input.graders.map(({ pin: _pin, ...rest }) => rest),
       cards: input.cards,
       grades: Object.values(input.grades),
     },

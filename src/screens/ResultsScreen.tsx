@@ -24,7 +24,7 @@ import {
 
 /** 'grading' means whatever order the session is set to grade in. */
 type SortKey = 'grading' | 'name' | 'grade' | 'rarity' | 'colour' | 'spread' | 'setNumber'
-type Layout = 'table' | 'cards' | 'cards-text'
+type Layout = 'table' | 'cards' | 'cards-text' | 'notes'
 type GraderView = 'combined' | 'both' | 'graders'
 
 interface Row {
@@ -133,6 +133,7 @@ export function ResultsScreen() {
               { value: 'table', label: 'Table' },
               { value: 'cards', label: 'Cards' },
               { value: 'cards-text', label: 'Cards and text' },
+              { value: 'notes', label: 'Notes' },
             ]}
           />
 
@@ -212,9 +213,108 @@ export function ResultsScreen() {
         <Notice>No cards match the current filters.</Notice>
       ) : layout === 'table' ? (
         <ResultsTable rows={rows} graderView={graderView} />
+      ) : layout === 'notes' ? (
+        <NotesView rows={rows} />
       ) : (
         <CardGallery rows={rows} withText={layout === 'cards-text'} />
       )}
+    </div>
+  )
+}
+
+/** Card list on the left, that card's notes from every grader on the right.
+ *
+ *  Overflow is handled by giving each column its own scroll container sized to
+ *  the viewport, so the page itself never scrolls and the two sides move
+ *  independently. Long notes wrap rather than truncate: a note you cannot read
+ *  in full is worthless, and `break-words` stops an unbroken string from
+ *  forcing the column wider than its track. */
+function NotesView({ rows }: { rows: Row[] }) {
+  const graders = useSession((s) => s.graders)
+  const grades = useSession((s) => s.grades)
+
+  const notesFor = (cardId: string) =>
+    graders
+      .map((g) => ({ grader: g, entry: grades[gradeKey(g.id, cardId)] ?? null }))
+      .filter((x) => (x.entry?.notes ?? '').trim().length > 0)
+
+  const withAny = rows.filter((r) => notesFor(r.card.id).length > 0)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Selection follows the filtered list rather than being held independently,
+  // so changing sort or filters can never leave a stale card selected.
+  const selected = withAny.find((r) => r.card.id === selectedId) ?? withAny[0] ?? null
+
+  if (withAny.length === 0) {
+    return <Notice>No notes yet. Notes written while grading show up here.</Notice>
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+      <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-edge">
+        <ul className="divide-y divide-edge">
+          {withAny.map(({ card, main }) => {
+            const active = selected?.card.id === card.id
+            return (
+              <li key={card.id}>
+                <button
+                  onClick={() => setSelectedId(card.id)}
+                  className={
+                    'flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ' +
+                    (active ? 'bg-accent text-black' : 'hover:bg-panel')
+                  }
+                >
+                  <span className="min-w-0 break-words">{card.name}</span>
+                  <span
+                    className={
+                      'shrink-0 font-mono text-xs ' + (active ? 'text-black' : 'text-muted')
+                    }
+                  >
+                    {main.letter ?? '—'} · {notesFor(card.id).length}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
+      {selected ? (
+        <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-edge bg-panel p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge pb-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-lg">{selected.card.name}</h3>
+              <p className="mt-0.5 text-xs text-muted">
+                {BUCKET_LABELS[selected.card.bucket] ?? selected.card.bucket} ·{' '}
+                {RARITY_LABELS[selected.card.rarity] ?? selected.card.rarity} ·{' '}
+                {selected.card.collectorNumber}
+              </p>
+            </div>
+            <GradeBadge grade={selected.main.letter} size="large" />
+          </div>
+
+          <ul className="mt-4 space-y-4">
+            {notesFor(selected.card.id).map(({ grader, entry }) => (
+              <li key={grader.id}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{grader.name}</span>
+                  <span className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted">
+                    {entry?.grade ?? '—'}
+                  </span>
+                  {entry?.isBuildaround ? (
+                    <span className="rounded border border-warn/50 px-1.5 py-0.5 text-xs text-warn">
+                      Build-around {entry.buildaroundGrade ?? '—'}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted">
+                  {entry?.notes}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -253,7 +353,6 @@ function CardGallery({ rows, withText }: { rows: Row[]; withText: boolean }) {
             <div className="mt-1 text-xs text-muted">
               {BUCKET_LABELS[card.bucket] ?? card.bucket} ·{' '}
               {RARITY_LABELS[card.rarity] ?? card.rarity} · {card.collectorNumber}
-              {main.mean != null ? ` · ${main.mean.toFixed(2)}` : ''}
             </div>
 
             {baVotes > 0 ? (
@@ -353,11 +452,6 @@ function ResultsTable({ rows, graderView }: { rows: Row[]; graderView: GraderVie
                 <>
                   <td className="px-3 py-2">
                     <GradeBadge grade={main.letter} />
-                    {main.mean != null ? (
-                      <span className="ml-2 font-mono text-xs text-muted">
-                        {main.mean.toFixed(2)}
-                      </span>
-                    ) : null}
                   </td>
                   <td className="px-3 py-2 font-mono">
                     {main.count > 1 ? (

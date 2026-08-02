@@ -109,6 +109,11 @@ export interface Grader {
   currentCardId: string | null
   followId: string | null
   accent: string
+  /** Four digits, assigned by the host when the session is created.
+   *  Stored and transmitted in the clear so the host can read it back; see the
+   *  note in supabase/migrations/0002. It prevents accidental cross-grading,
+   *  not access. */
+  pin: string | null
 }
 
 export interface SessionMeta {
@@ -119,6 +124,9 @@ export interface SessionMeta {
   setName: string
   bonusSets: BonusSet[]
   settings: GradingSettings
+  /** The grader who created the session. Decides who is shown the PIN list.
+   *  UI convenience only; anyone with the code can read the table directly. */
+  hostGraderId: string | null
 }
 
 // Re-exported from grades.ts to keep the type surface in one import site.

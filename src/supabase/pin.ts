@@ -1,17 +1,12 @@
-/** PIN hashing.
+/** PINs and session codes.
  *
- *  This is NOT a security boundary. Anyone holding the session code can read
- *  the graders table through the anon key, and the PIN space is 10^4. Its only
- *  job is stopping graders from accidentally submitting as each other.
- *  Salting with the session id at least keeps hashes from being comparable
- *  across sessions. Do not present this to users as protection.
+ *  The PIN is NOT a security boundary and is deliberately not hashed: the host
+ *  needs to read PINs back to tell a grader what theirs is, which a hash makes
+ *  impossible. Nothing is lost by this, because the session code has always
+ *  been the real credential and the anon key could always read the graders
+ *  table. The PIN's only job is stopping graders from submitting as each other
+ *  by accident.
  */
-
-export async function hashPin(pin: string, sessionId: string): Promise<string> {
-  const data = new TextEncoder().encode(`mtglfg:${sessionId}:${pin}`)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
 
 export function isValidPin(pin: string): boolean {
   return /^\d{4}$/.test(pin)
@@ -24,4 +19,10 @@ export function generateSessionCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(6))
   const chars = [...bytes].map((b) => ALPHABET[b % ALPHABET.length])
   return `${chars.slice(0, 3).join('')}-${chars.slice(3).join('')}`
+}
+
+/** Suggests a PIN for a grader the host has not chosen one for. */
+export function generatePin(): string {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 10000
+  return String(n).padStart(4, '0')
 }

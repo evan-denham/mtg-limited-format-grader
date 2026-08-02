@@ -13,12 +13,16 @@ export function SettingsScreen() {
   const graders = useSession((s) => s.graders)
   const updateSettings = useSession((s) => s.updateSettings)
 
+  const meId = useSession((st) => st.meId)
+
   const [colorText, setColorText] = useState(
     meta ? formatColorOrder(meta.settings.colorOrder) : '',
   )
 
   if (!meta) return null
   const s = meta.settings
+  // Falls back to the first grader for sessions created before hosts existed.
+  const isHost = meta.hostGraderId ? meId === meta.hostGraderId : meId === graders[0]?.id
 
   const sectionCounts = new Map<string, number>()
   for (const c of cards) sectionCounts.set(c.section, (sectionCounts.get(c.section) ?? 0) + 1)
@@ -40,6 +44,8 @@ export function SettingsScreen() {
           />
         ))}
       </Panel>
+
+      {isHost ? <GraderPins /> : null}
 
       <Panel className="space-y-4">
         <div className="text-sm">Grading order</div>
@@ -150,6 +156,46 @@ export function SettingsScreen() {
         </Notice>
       ) : null}
     </div>
+  )
+}
+
+/** Host-only roster showing each grader's PIN, so the host can remind someone
+ *  what theirs is. Hidden behind a disclosure so it is not on screen by
+ *  default when someone else is looking over your shoulder. */
+function GraderPins() {
+  const meta = useSession((s) => s.meta)
+  const graders = useSession((s) => s.graders)
+  const [revealed, setRevealed] = useState(false)
+
+  if (!meta) return null
+
+  return (
+    <Panel className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm">Grader PINs</div>
+        <Button onClick={() => setRevealed((r) => !r)}>{revealed ? 'Hide' : 'Show'}</Button>
+      </div>
+      <p className="text-xs text-muted">
+        Visible to you as the session host. Anyone with the session code can read these from
+        the database directly, so treat them as a convenience, not a secret.
+      </p>
+
+      {revealed ? (
+        <ul className="divide-y divide-edge rounded border border-edge">
+          {graders.map((g) => (
+            <li key={g.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+              <span>
+                {g.name}
+                {g.id === meta.hostGraderId ? (
+                  <span className="ml-2 text-xs text-muted">host</span>
+                ) : null}
+              </span>
+              <span className="font-mono">{g.pin ?? 'not set'}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Panel>
   )
 }
 

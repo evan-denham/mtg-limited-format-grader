@@ -9,7 +9,28 @@ export function Landing() {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const sessions = local.listSessions()
+
+  /** Deletes remotely first. If that fails, the local copy is kept rather than
+   *  orphaning a session on the server that this device can no longer see. */
+  async function remove(sessionId: string, name: string) {
+    if (!window.confirm(`Delete "${name}" and every grade in it? This cannot be undone.`)) return
+    setDeleting(sessionId)
+    setError(null)
+    try {
+      await backend.deleteSession(sessionId)
+      local.deleteSession(sessionId)
+      window.location.reload()
+    } catch (err) {
+      setError(
+        `Could not delete on the server, so it was kept on this device too: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+      setDeleting(null)
+    }
+  }
 
   async function join() {
     const trimmed = code.trim().toUpperCase()
@@ -91,13 +112,8 @@ export function Landing() {
                 </button>
                 <Button
                   variant="danger"
-                  onClick={() => {
-                    local.deleteSession(s.id)
-                    // listSessions is read at render; force one.
-                    setCode((c) => c)
-                    navigate({ name: 'landing' })
-                    window.location.reload()
-                  }}
+                  loading={deleting === s.id}
+                  onClick={() => void remove(s.id, s.name)}
                 >
                   Delete
                 </Button>
