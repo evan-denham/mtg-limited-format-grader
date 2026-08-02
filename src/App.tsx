@@ -96,7 +96,7 @@ export default function App() {
   }
 
   return (
-    <Shell session={session} route={route} tabs>
+    <Shell session={session} route={route} tabs wide={route.name === 'results'}>
       {route.name === 'results' ? (
         <ResultsScreen />
       ) : route.name === 'settings' ? (
@@ -113,11 +113,15 @@ function Shell({
   session,
   route,
   tabs,
+  wide,
 }: {
   children: React.ReactNode
   session?: { name: string; code: string; id: string }
   route?: Route
   tabs?: boolean
+  /** Results needs the full screen: card images there are the content, not
+   *  decoration, and a 6xl column wastes most of a desktop display. */
+  wide?: boolean
 }) {
   const meId = useSession((s) => s.meId)
   const graders = useSession((s) => s.graders)
@@ -168,7 +172,11 @@ function Shell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main
+        className={`mx-auto w-full px-4 py-6 ${wide ? 'max-w-[1800px]' : 'max-w-6xl'}`}
+      >
+        {children}
+      </main>
     </div>
   )
 }

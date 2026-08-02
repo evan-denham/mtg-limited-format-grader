@@ -250,45 +250,55 @@ function NotesView({ rows }: { rows: Row[] }) {
         {withAny.length} {withAny.length === 1 ? 'card has' : 'cards have'} notes.
       </div>
 
-      {/* One row per card. The page scrolls rather than a nested container:
-          nested scroll regions are awkward on touch, and the card image is the
-          point of the view so it should not be squeezed into a side rail. */}
-      <ul className="space-y-3">
+      {/* One full-width row per card. The page scrolls rather than a nested
+          container: nested scroll regions are awkward on touch, and the image
+          is the content here so it gets real size at the cost of scrolling. */}
+      <ul className="space-y-4">
         {withAny.map(({ card, main }) => (
           <li
             key={card.id}
-            className="flex gap-4 rounded-lg border border-edge bg-panel p-3 transition-colors hover:border-edge-strong"
+            className="flex flex-col gap-5 rounded-lg border border-edge bg-panel p-4 transition-colors hover:border-edge-strong sm:flex-row"
           >
-            <div className="w-28 shrink-0 sm:w-36">
+            <div className="w-full max-w-[18rem] shrink-0 self-center sm:w-64 sm:self-start lg:w-80">
               <CardImage src={card.faces[0]?.imageNormal ?? null} alt={card.name} />
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3 border-b border-edge pb-2">
-                <p className="text-xs text-muted">
-                  {BUCKET_LABELS[card.bucket] ?? card.bucket} ·{' '}
-                  {RARITY_LABELS[card.rarity] ?? card.rarity} · {card.collectorNumber}
-                </p>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge pb-3">
+                <div className="min-w-0">
+                  <h3 className="break-words text-xl font-medium">{card.name}</h3>
+                  <p className="mt-1 text-sm text-muted">
+                    {card.faces[0]?.typeLine}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {BUCKET_LABELS[card.bucket] ?? card.bucket} ·{' '}
+                    {RARITY_LABELS[card.rarity] ?? card.rarity} · {card.set.toUpperCase()}{' '}
+                    {card.collectorNumber}
+                    {card.section !== 'main' ? ` · ${card.section.toUpperCase()}` : ''}
+                  </p>
+                </div>
                 <GradeBadge grade={main.letter} size="large" />
               </div>
 
-              <ul className="mt-3 space-y-3">
+              <ul className="mt-4 space-y-4">
                 {notesFor(card.id).map(({ grader, entry }) => (
                   <li key={grader.id}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{grader.name}</span>
-                      <span className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted">
+                      <span className="font-medium">{grader.name}</span>
+                      <span className="rounded border border-edge bg-raised px-2 py-0.5 font-mono text-sm text-muted">
                         {entry?.grade ?? '—'}
                       </span>
                       {entry?.isBuildaround ? (
-                        <span className="rounded border border-warn/50 px-1.5 py-0.5 text-xs text-warn">
+                        <span className="rounded border border-warn/50 px-2 py-0.5 text-xs text-warn">
                           Build-around {entry.buildaroundGrade ?? '—'}
                         </span>
                       ) : null}
                     </div>
                     {/* whitespace-pre-wrap keeps the grader's line breaks;
-                        break-words stops one long token widening the row. */}
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted">
+                        break-words stops one long token widening the row.
+                        The row spans the screen but the text does not: past
+                        roughly 75 characters a line becomes hard to track. */}
+                    <p className="mt-1.5 max-w-[75ch] whitespace-pre-wrap break-words leading-relaxed text-muted">
                       {entry?.notes}
                     </p>
                   </li>
