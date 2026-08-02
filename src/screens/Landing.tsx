@@ -7,30 +7,11 @@ import { isBackendConfigured } from '../supabase/client'
 
 export function Landing() {
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const sessions = local.listSessions()
-
-  /** Deletes remotely first. If that fails, the local copy is kept rather than
-   *  orphaning a session on the server that this device can no longer see. */
-  async function remove(sessionId: string, name: string) {
-    if (!window.confirm(`Delete "${name}" and every grade in it? This cannot be undone.`)) return
-    setDeleting(sessionId)
-    setError(null)
-    try {
-      await backend.deleteSession(sessionId)
-      local.deleteSession(sessionId)
-      window.location.reload()
-    } catch (err) {
-      setError(
-        `Could not delete on the server, so it was kept on this device too: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      )
-      setDeleting(null)
-    }
-  }
 
   async function join() {
     const trimmed = code.trim().toUpperCase()
@@ -38,27 +19,60 @@ export function Landing() {
     setJoining(true)
     setError(null)
 
-    const localMatch = local.findSessionByCode(trimmed)
-    if (localMatch) {
-      navigate({ name: 'grade', sessionId: localMatch.id })
-      return
-    }
-
     try {
-      const remote = await backend.findSessionByCode(trimmed)
+      // A session already on this device does not need the password re-entered.
+      const localMatch = local.findSessionByCode(trimmed)
+      if (localMatch && local.loadSessionPassword(localMatch.id)) {
+        navigate({ name: 'grade', sessionId: localMatch.id })
+        return
+      }
+
+      if (!isBackendConfigured) {
+        setError(
+          localMatch
+            ? 'This session is on this device but its password is missing. Ask the host.'
+            : `No session with code ${trimmed} on this device. Multi-device joining needs Supabase configured.`,
+        )
+        return
+      }
+
+      const remote = await backend.findSessionByCode(trimmed, password)
       if (remote) {
+        local.saveSessionPassword(remote.id, password)
         navigate({ name: 'grade', sessionId: remote.id })
         return
       }
-      setError(
-        isBackendConfigured
-          ? `No session with code ${trimmed}.`
-          : `No session with code ${trimmed} on this device. Multi-device joining needs Supabase configured.`,
-      )
+      // RLS returns no rows for a wrong code and a wrong password alike, so
+      // the message cannot distinguish them without leaking which was wrong.
+      setError('No session matched that code and password.')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setJoining(false)
+    }
+  }
+
+  /** Deleting is admin-only server side, so the admin password is required. */
+  async function remove(sessionId: string, name: string) {
+    if (!window.confirm(`Delete "${name}" and every grade in it? This cannot be undone.`)) return
+
+    let admin = local.loadAdminPassword() ?? ''
+    if (isBackendConfigured) {
+      const entered = window.prompt(`Admin password required to delete "${name}".`, admin)
+      if (entered === null) return
+      admin = entered
+    }
+
+    setDeleting(sessionId)
+    setError(null)
+    try {
+      await backend.deleteSession(sessionId, admin)
+      if (isBackendConfigured) local.saveAdminPassword(admin)
+      local.deleteSession(sessionId)
+      window.location.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setDeleting(null)
     }
   }
 
@@ -72,27 +86,39 @@ export function Landing() {
       </div>
 
       <Panel className="space-y-4">
-        <div className="text-sm">Start a session</div>
-        <Button variant="primary" onClick={() => navigate({ name: 'create' })}>
-          New session
-        </Button>
-      </Panel>
-
-      <Panel className="space-y-4">
         <div className="text-sm">Join a session</div>
         <Field label="Session code">
           <Input
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && join()}
             placeholder="MXK-492"
             spellCheck={false}
           />
         </Field>
-        <Button onClick={join} disabled={!code.trim() || joining}>
-          {joining ? 'Looking up' : 'Join'}
+        {isBackendConfigured ? (
+          <Field label="Session password" hint="Given to you by whoever set up the session.">
+            <Input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && join()}
+              autoComplete="off"
+            />
+          </Field>
+        ) : null}
+        <Button variant="primary" onClick={join} disabled={!code.trim() || joining}>
+          {joining ? 'Checking' : 'Join'}
         </Button>
         {error ? <Notice tone="error">{error}</Notice> : null}
+      </Panel>
+
+      <Panel className="space-y-3">
+        <div className="text-sm">Start a session</div>
+        <p className="text-xs text-muted">
+          {isBackendConfigured
+            ? 'Requires the admin password.'
+            : 'Running local-only, so no admin password is needed.'}
+        </p>
+        <Button onClick={() => navigate({ name: 'create' })}>New session</Button>
       </Panel>
 
       {sessions.length > 0 ? (

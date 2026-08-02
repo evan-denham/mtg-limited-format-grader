@@ -35,6 +35,9 @@ export function CreateSession() {
   const [settings, setSettings] = useState<GradingSettings>(DEFAULT_SETTINGS)
   const [colorText, setColorText] = useState(formatColorOrder(DEFAULT_SETTINGS.colorOrder))
 
+  const [adminPassword, setAdminPassword] = useState(() => local.loadAdminPassword() ?? '')
+  const [joinPassword, setJoinPassword] = useState('')
+
   const [building, setBuilding] = useState(false)
   const [progress, setProgress] = useState('')
   const [report, setReport] = useState<PoolReport | null>(null)
@@ -93,8 +96,11 @@ export function CreateSession() {
   const names = filled.map((g) => g.name.trim())
   const namesUnique = new Set(names.map((n) => n.toLowerCase())).size === names.length
   const pinsValid = filled.every((g) => isValidPin(g.pin))
+  // Only the admin password is enforced server side; these are here so the
+  // form fails fast instead of after a full Scryfall fetch.
+  const credsOk = !isBackendConfigured || (adminPassword.length > 0 && joinPassword.length >= 4)
   const canCreate =
-    Boolean(setInfo) && names.length > 0 && namesUnique && pinsValid && !building
+    Boolean(setInfo) && names.length > 0 && namesUnique && pinsValid && credsOk && !building
 
   async function create() {
     if (!setInfo) return
@@ -151,6 +157,8 @@ export function CreateSession() {
         settings: finalSettings,
         graders: newGraders,
         hostIndex: safeHostIndex,
+        joinPassword,
+        adminPassword,
       })
 
       if (created) {
@@ -182,11 +190,21 @@ export function CreateSession() {
         hostGraderId,
       }
 
+      if (isBackendConfigured) {
+        local.saveSessionPassword(sessionId, joinPassword)
+        local.saveAdminPassword(adminPassword)
+      }
       persistLocally(meta, cards, graders)
       hydrate({ meta, cards, graders, grades: [], meId: null })
       navigate({ name: 'grade', sessionId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      // RLS reports a refused insert as a policy violation; say what it means.
+      setError(
+        /row-level security|violates|policy/i.test(message)
+          ? 'The admin password was not accepted, so the session was not created.'
+          : message,
+      )
     } finally {
       setBuilding(false)
     }
@@ -285,6 +303,34 @@ export function CreateSession() {
               Add
             </Button>
           </div>
+        </Panel>
+      ) : null}
+
+      {isBackendConfigured ? (
+        <Panel className="space-y-4">
+          <div className="text-sm">Access</div>
+          <Field
+            label="Admin password"
+            hint="Required to create a session. Checked by the database, never stored in the site. Kept for this browser tab only."
+          >
+            <Input
+              type="password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              autoComplete="off"
+            />
+          </Field>
+          <Field
+            label="Session password"
+            hint="Give this to your graders along with the session code. They need both to join. Minimum four characters."
+          >
+            <Input
+              value={joinPassword}
+              onChange={(e) => setJoinPassword(e.target.value)}
+              autoComplete="off"
+              placeholder="at least 4 characters"
+            />
+          </Field>
         </Panel>
       ) : null}
 

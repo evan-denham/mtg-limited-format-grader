@@ -6,6 +6,9 @@ import { Landing } from './screens/Landing'
 import { PickGrader } from './screens/PickGrader'
 import { ResultsScreen } from './screens/ResultsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { UnlockSession } from './screens/UnlockSession'
+import * as local from './storage/local'
+import { isBackendConfigured } from './supabase/client'
 import { Notice, Spinner } from './components/ui'
 import { useSession } from './store/session'
 import { backend } from './supabase/backend'
@@ -23,10 +26,15 @@ export default function App() {
   const applyRemoteGrader = useSession((s) => s.applyRemoteGrader)
   const applyRemoteSettings = useSession((s) => s.applyRemoteSettings)
 
+  // Since 0004 the session password is required before anything can be read,
+  // so hold off loading until it is available.
+  const hasPassword =
+    !isBackendConfigured || !sessionId || Boolean(local.loadSessionPassword(sessionId))
+
   // Load whenever the route points at a session we do not already hold.
   useEffect(() => {
-    if (sessionId && meta?.id !== sessionId) void load(sessionId)
-  }, [sessionId, meta?.id, load])
+    if (sessionId && hasPassword && meta?.id !== sessionId) void load(sessionId)
+  }, [sessionId, hasPassword, meta?.id, load])
 
   // Live sync. Re-subscribes only when the session changes.
   useEffect(() => {
@@ -43,6 +51,14 @@ export default function App() {
   }
   if (route.name === 'create') {
     return <Shell><CreateSession /></Shell>
+  }
+
+  if (sessionId && !hasPassword) {
+    return (
+      <Shell>
+        <UnlockSession sessionId={sessionId} />
+      </Shell>
+    )
   }
 
   if (loading) {

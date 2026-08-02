@@ -23,12 +23,18 @@ export const isBackendConfigured = Boolean(url && anonKey)
 export interface SessionContext {
   sessionId?: string | null
   code?: string | null
+  /** Per-session password. Required by RLS since migration 0004. */
+  password?: string | null
+  /** Admin password. Required to create or delete sessions. Never persisted
+   *  to localStorage and never part of the bundle: it is typed each time and
+   *  compared inside Postgres. */
+  adminPassword?: string | null
 }
 
 const cache = new Map<string, SupabaseClient>()
 
 function contextKey(ctx: SessionContext): string {
-  return `${ctx.sessionId ?? ''}|${ctx.code ?? ''}`
+  return [ctx.sessionId ?? '', ctx.code ?? '', ctx.password ?? '', ctx.adminPassword ?? ''].join('|')
 }
 
 /** A client carrying the headers the RLS policies check. Cached per context so
@@ -43,6 +49,8 @@ export function clientFor(ctx: SessionContext = {}): SupabaseClient | null {
   const headers: Record<string, string> = {}
   if (ctx.sessionId) headers['x-session-id'] = ctx.sessionId
   if (ctx.code) headers['x-session-code'] = ctx.code
+  if (ctx.password) headers['x-session-password'] = ctx.password
+  if (ctx.adminPassword) headers['x-admin-password'] = ctx.adminPassword
 
   const client = createClient(url as string, anonKey as string, {
     auth: { persistSession: false },

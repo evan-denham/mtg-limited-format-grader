@@ -14,6 +14,7 @@ import type {
   SessionMeta,
 } from '../domain/types'
 import { clientFor, isBackendConfigured } from './client'
+import * as local from '../storage/local'
 
 export interface LoadedSession {
   meta: SessionMeta
@@ -29,6 +30,10 @@ export interface NewGrader {
 
 export interface CreateSessionArgs {
   code: string
+  /** Shared password graders must supply to join. */
+  joinPassword: string
+  /** Verified inside Postgres; only an admin may create a session. */
+  adminPassword: string
   name: string
   setCode: string
   setName: string
@@ -46,13 +51,13 @@ export interface Backend {
     args: CreateSessionArgs,
   ): Promise<{ sessionId: string; graders: Grader[]; hostGraderId: string } | null>
   loadSession(sessionId: string): Promise<LoadedSession | null>
-  findSessionByCode(code: string): Promise<{ id: string } | null>
+  findSessionByCode(code: string, password: string): Promise<{ id: string } | null>
   saveGrade(sessionId: string, grade: Grade): Promise<void>
   savePosition(sessionId: string, graderId: string, cardId: string): Promise<void>
   saveFollow(sessionId: string, graderId: string, followId: string | null): Promise<void>
   saveSettings(sessionId: string, settings: GradingSettings): Promise<void>
   claimGrader(sessionId: string, graderId: string, pin: string): Promise<'ok' | 'wrong-pin'>
-  deleteSession(sessionId: string): Promise<void>
+  deleteSession(sessionId: string, adminPassword: string): Promise<void>
   subscribe(sessionId: string, handlers: RealtimeHandlers): () => void
 }
 
@@ -67,6 +72,7 @@ export interface RealtimeHandlers {
 interface SessionRow {
   id: string
   code: string
+  join_password: string
   name: string
   set_code: string
   set_name: string
@@ -148,24 +154,25 @@ function makeSupabaseBackend(): Backend {
   /** Row level security (migration 0003) checks a session id or code sent as a
    *  request header, and supabase-js fixes headers at construction, so every
    *  call resolves the client for its own session context. */
-  const forSession = (sessionId: string) => {
-    const c = clientFor({ sessionId })
+  const need = (c: ReturnType<typeof clientFor>) => {
     if (!c) throw new Error('Supabase is not configured')
     return c
   }
-  const forCode = (code: string) => {
-    const c = clientFor({ code })
-    if (!c) throw new Error('Supabase is not configured')
-    return c
-  }
+  /** The session password is read from storage so callers do not each have to
+   *  thread it through. It is put there by the unlock flow on join. */
+  const forSession = (sessionId: string) =>
+    need(clientFor({ sessionId, password: local.loadSessionPassword(sessionId) }))
+  const forCode = (code: string, password: string) => need(clientFor({ code, password }))
+  const asAdmin = (adminPassword: string, extra: { sessionId?: string; code?: string } = {}) =>
+    need(clientFor({ ...extra, adminPassword }))
 
   return {
     configured: true,
 
     async createSession(args) {
-      // The code is presented up front so the INSERT can return the new row:
-      // RETURNING is subject to the select policy.
-      const db = forCode(args.code)
+      // Admin credentials authorise the insert, and the select policy that
+      // RETURNING depends on also accepts an admin.
+      const db = asAdmin(args.adminPassword, { code: args.code })
       const { data: session, error } = await db
         .from('sessions')
         .insert({
@@ -176,6 +183,7 @@ function makeSupabaseBackend(): Backend {
           bonus_sets: args.bonusSets,
           cards: args.cards,
           settings: args.settings,
+          join_password: args.joinPassword,
         })
         .select('id')
         .single()
@@ -238,8 +246,8 @@ function makeSupabaseBackend(): Backend {
       }
     },
 
-    async findSessionByCode(code) {
-      const db = forCode(code)
+    async findSessionByCode(code, password) {
+      const db = forCode(code, password)
       const { data } = await db
         .from('sessions')
         .select('id')
@@ -298,9 +306,15 @@ function makeSupabaseBackend(): Backend {
       return existing === pin ? 'ok' : 'wrong-pin'
     },
 
-    async deleteSession(sessionId) {
-      const { error } = await forSession(sessionId).from('sessions').delete().eq('id', sessionId)
+    async deleteSession(sessionId, adminPassword) {
+      const db = asAdmin(adminPassword, { sessionId })
+      const { error } = await db.from('sessions').delete().eq('id', sessionId)
       if (error) throw new Error(`Could not delete session: ${error.message}`)
+
+      // RLS turns an unauthorised delete into a no-op rather than an error, so
+      // confirm the row is actually gone instead of trusting the status.
+      const { data } = await db.from('sessions').select('id').eq('id', sessionId).maybeSingle()
+      if (data) throw new Error('Delete was refused. Check the admin password.')
     },
 
     subscribe(sessionId, handlers) {

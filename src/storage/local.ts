@@ -13,6 +13,8 @@ const POOL_PREFIX = 'mtglfg.pool.'
 const SESSION_PREFIX = 'mtglfg.session.'
 const INDEX_KEY = 'mtglfg.index'
 const IDENTITY_PREFIX = 'mtglfg.identity.'
+const PASSWORD_PREFIX = 'mtglfg.password.'
+const ADMIN_KEY = 'mtglfg.admin'
 
 export interface LocalSession {
   meta: SessionMeta
@@ -75,6 +77,7 @@ export function deleteSession(sessionId: string): void {
   localStorage.removeItem(SESSION_PREFIX + sessionId)
   localStorage.removeItem(POOL_PREFIX + sessionId)
   localStorage.removeItem(IDENTITY_PREFIX + sessionId)
+  localStorage.removeItem(PASSWORD_PREFIX + sessionId)
   write(
     INDEX_KEY,
     listSessions().filter((s) => s.id !== sessionId),
@@ -122,4 +125,57 @@ export function saveIdentity(sessionId: string, identity: Identity): void {
 
 export function clearIdentity(sessionId: string): void {
   localStorage.removeItem(IDENTITY_PREFIX + sessionId)
+}
+
+
+// --- Session password ---
+// Kept so a reload does not re-prompt. It is the shared grading password, not
+// an admin credential.
+
+export function loadSessionPassword(sessionId: string): string | null {
+  try {
+    return localStorage.getItem(PASSWORD_PREFIX + sessionId)
+  } catch {
+    return null
+  }
+}
+
+export function saveSessionPassword(sessionId: string, password: string): void {
+  try {
+    localStorage.setItem(PASSWORD_PREFIX + sessionId, password)
+  } catch {
+    /* quota; the user will be prompted again next load */
+  }
+}
+
+export function clearSessionPassword(sessionId: string): void {
+  localStorage.removeItem(PASSWORD_PREFIX + sessionId)
+}
+
+// --- Admin password ---
+// sessionStorage, not localStorage: it is discarded when the tab closes rather
+// than persisting on a shared machine.
+
+export function loadAdminPassword(): string | null {
+  try {
+    return sessionStorage.getItem(ADMIN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveAdminPassword(password: string): void {
+  try {
+    sessionStorage.setItem(ADMIN_KEY, password)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearAdminPassword(): void {
+  try {
+    sessionStorage.removeItem(ADMIN_KEY)
+  } catch {
+    /* ignore */
+  }
 }
