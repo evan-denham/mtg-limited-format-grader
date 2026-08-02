@@ -10,12 +10,13 @@
     />
     <meta name="theme-color" content="#0f1115" />
 
-    <!-- Tab icon: a drawn glyph, not the photo. Tabs render at 16px, where a
-         face becomes an indistinct blob. -->
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-
-    <!-- Home-screen icon: the photo, padded square and scaled to the 180px
-         iOS wants, so it is not stretched from its native 139x126. -->
+    <!-- One photo everywhere, at the size each context wants. All of these are
+         derived from the same source image, padded square on the page
+         background so nothing is stretched from its native 139x126. -->
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./favicon-48.png" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
 
     <!-- Link preview when a session URL is pasted into a chat. og:image must
