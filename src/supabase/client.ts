@@ -34,7 +34,11 @@ export interface SessionContext {
 const cache = new Map<string, SupabaseClient>()
 
 function contextKey(ctx: SessionContext): string {
-  return [ctx.sessionId ?? '', ctx.code ?? '', ctx.password ?? '', ctx.adminPassword ?? ''].join('|')
+  // Trim before keying too, or "pw" and "pw " would cache as different
+  // clients that then send identical headers.
+  return [ctx.sessionId ?? '', ctx.code ?? '', ctx.password ?? '', ctx.adminPassword ?? '']
+    .map((v) => v.trim())
+    .join('|')
 }
 
 /** A client carrying the headers the RLS policies check. Cached per context so
@@ -46,11 +50,15 @@ export function clientFor(ctx: SessionContext = {}): SupabaseClient | null {
   const existing = cache.get(key)
   if (existing) return existing
 
+  // Trimmed here as the last line of defence. HTTP strips whitespace around a
+  // header value anyway (RFC 7230), so an untrimmed credential silently
+  // becomes a different string in transit and never matches. Normalising at
+  // the one place headers are built means no caller can reintroduce it.
   const headers: Record<string, string> = {}
-  if (ctx.sessionId) headers['x-session-id'] = ctx.sessionId
-  if (ctx.code) headers['x-session-code'] = ctx.code
-  if (ctx.password) headers['x-session-password'] = ctx.password
-  if (ctx.adminPassword) headers['x-admin-password'] = ctx.adminPassword
+  if (ctx.sessionId) headers['x-session-id'] = ctx.sessionId.trim()
+  if (ctx.code) headers['x-session-code'] = ctx.code.trim()
+  if (ctx.password) headers['x-session-password'] = ctx.password.trim()
+  if (ctx.adminPassword) headers['x-admin-password'] = ctx.adminPassword.trim()
 
   const client = createClient(url as string, anonKey as string, {
     auth: { persistSession: false },

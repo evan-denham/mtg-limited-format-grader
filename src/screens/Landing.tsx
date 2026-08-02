@@ -4,6 +4,7 @@ import { navigate } from '../router'
 import * as local from '../storage/local'
 import { backend } from '../supabase/backend'
 import { isBackendConfigured } from '../supabase/client'
+import { normaliseCredential } from '../supabase/pin'
 
 export function Landing() {
   const [code, setCode] = useState('')
@@ -36,9 +37,10 @@ export function Landing() {
         return
       }
 
-      const remote = await backend.findSessionByCode(trimmed, password)
+      const pw = normaliseCredential(password)
+      const remote = await backend.findSessionByCode(trimmed, pw)
       if (remote) {
-        local.saveSessionPassword(remote.id, password)
+        local.saveSessionPassword(remote.id, pw)
         navigate({ name: 'grade', sessionId: remote.id })
         return
       }

@@ -6,7 +6,13 @@ import { DEFAULT_SETTINGS, formatColorOrder, parseColorOrder, sectionsInPool } f
 import { ORDER_MODE_LABELS, type BonusSet, type CardRecord, type GradingSettings, type Grader, type SessionMeta } from '../domain/types'
 import { ScryfallError, type RawSet } from '../scryfall/api'
 import { buildPool, detectBonusSheets, validateSet, type BonusRequest, type PoolReport } from '../scryfall/pool'
-import { generatePin, generateSessionCode, isValidPin } from '../supabase/pin'
+import {
+  generatePin,
+  generateSessionCode,
+  isValidPin,
+  isValidSessionPassword,
+  normaliseCredential,
+} from '../supabase/pin'
 import { backend } from '../supabase/backend'
 import { isBackendConfigured } from '../supabase/client'
 import * as local from '../storage/local'
@@ -98,7 +104,9 @@ export function CreateSession() {
   const pinsValid = filled.every((g) => isValidPin(g.pin))
   // Only the admin password is enforced server side; these are here so the
   // form fails fast instead of after a full Scryfall fetch.
-  const credsOk = !isBackendConfigured || (adminPassword.length > 0 && joinPassword.length >= 4)
+  const credsOk =
+    !isBackendConfigured ||
+    (normaliseCredential(adminPassword).length > 0 && isValidSessionPassword(joinPassword))
   const canCreate =
     Boolean(setInfo) && names.length > 0 && namesUnique && pinsValid && credsOk && !building
 
@@ -157,8 +165,8 @@ export function CreateSession() {
         settings: finalSettings,
         graders: newGraders,
         hostIndex: safeHostIndex,
-        joinPassword,
-        adminPassword,
+        joinPassword: normaliseCredential(joinPassword),
+        adminPassword: normaliseCredential(adminPassword),
       })
 
       if (created) {
@@ -191,8 +199,8 @@ export function CreateSession() {
       }
 
       if (isBackendConfigured) {
-        local.saveSessionPassword(sessionId, joinPassword)
-        local.saveAdminPassword(adminPassword)
+        local.saveSessionPassword(sessionId, normaliseCredential(joinPassword))
+        local.saveAdminPassword(normaliseCredential(adminPassword))
       }
       persistLocally(meta, cards, graders)
       hydrate({ meta, cards, graders, grades: [], meId: null })
@@ -329,6 +337,7 @@ export function CreateSession() {
               onChange={(e) => setJoinPassword(e.target.value)}
               autoComplete="off"
               placeholder="at least 4 characters"
+              onBlur={(e) => setJoinPassword(normaliseCredential(e.target.value))}
             />
           </Field>
         </Panel>

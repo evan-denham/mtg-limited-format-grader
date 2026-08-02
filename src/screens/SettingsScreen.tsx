@@ -6,7 +6,7 @@ import { formatColorOrder, parseColorOrder, RARITY_LABELS } from '../domain/orde
 import { ORDER_MODE_LABELS, type GradingSettings } from '../domain/types'
 import { useSession } from '../store/session'
 import { isBackendConfigured } from '../supabase/client'
-import { generatePin, isValidPin } from '../supabase/pin'
+import { generatePin, isValidPin, normaliseCredential } from '../supabase/pin'
 import * as local from '../storage/local'
 
 export function SettingsScreen() {
@@ -193,8 +193,8 @@ function GraderPins() {
     setAdded(null)
     try {
       const newName = name.trim()
-      await addGrader(newName, pin, adminPassword)
-      if (isBackendConfigured) local.saveAdminPassword(adminPassword)
+      await addGrader(newName, pin, normaliseCredential(adminPassword))
+      if (isBackendConfigured) local.saveAdminPassword(normaliseCredential(adminPassword))
       setAdded(`${newName} added with PIN ${pin}. Give them the session code and password too.`)
       setName('')
       setPin(generatePin())

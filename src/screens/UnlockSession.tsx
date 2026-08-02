@@ -9,6 +9,7 @@ import { Button, Field, Input, Notice, Panel } from '../components/ui'
 import { navigate } from '../router'
 import * as local from '../storage/local'
 import { useSession } from '../store/session'
+import { normaliseCredential } from '../supabase/pin'
 
 export function UnlockSession({ sessionId }: { sessionId: string }) {
   const load = useSession((s) => s.load)
@@ -23,7 +24,7 @@ export function UnlockSession({ sessionId }: { sessionId: string }) {
 
     // Store before loading: the backend reads the password from storage when
     // it builds its client. Cleared again if the load turns up nothing.
-    local.saveSessionPassword(sessionId, password)
+    local.saveSessionPassword(sessionId, normaliseCredential(password))
     try {
       await load(sessionId)
       if (!useSession.getState().meta) {
