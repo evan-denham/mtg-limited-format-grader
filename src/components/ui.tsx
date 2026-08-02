@@ -59,7 +59,9 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   return (
     <input
       className={
-        'w-full rounded border border-edge bg-ink px-3 py-2 text-sm text-text ' +
+        // text-base below sm: iOS Safari force-zooms the page when a focused
+        // field is under 16px, and does not zoom back out.
+        'w-full rounded border border-edge bg-ink px-3 py-2 text-base text-text sm:text-sm ' +
         'transition-colors hover:border-edge-strong focus:border-accent ' +
         `placeholder:text-muted ${className}`
       }
@@ -76,7 +78,7 @@ export function Select({
   return (
     <select
       className={
-        'rounded border border-edge bg-raised px-3 py-2 text-sm text-text ' +
+        'rounded border border-edge bg-raised px-3 py-2 text-base text-text sm:text-sm ' +
         `transition-colors hover:border-edge-strong hover:bg-raised-hover ${className}`
       }
       {...props}

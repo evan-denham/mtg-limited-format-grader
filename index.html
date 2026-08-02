@@ -2,9 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Limited Format Grader</title>
+    <meta
+      name="description"
+      content="Grade every card in a Magic set for Limited, card by card, with one or more graders."
+    />
+    <meta name="theme-color" content="#0f1115" />
+
+    <!-- Tab icon and home-screen icon. thumbnail.png is served from public/,
+         so Vite copies it verbatim and the base path is applied on build. -->
+    <link rel="icon" type="image/png" href="./thumbnail.png" />
+    <link rel="apple-touch-icon" href="./thumbnail.png" />
+
+    <!-- Link preview, for when a session URL is pasted into a chat. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Limited Format Grader" />
+    <meta
+      property="og:description"
+      content="Grade every card in a Magic set for Limited, card by card, with one or more graders."
+    />
+    <meta property="og:image" content="./thumbnail.png" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>

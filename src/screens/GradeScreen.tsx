@@ -8,9 +8,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardView } from '../components/CardView'
 import { GradeScale } from '../components/GradeScale'
-import { Button, Notice, Panel } from '../components/ui'
+import { Button, Input, Notice, Panel } from '../components/ui'
 import { applyModifier, type GradeLetter } from '../domain/grades'
 import { gradeKey, useOrderedCards, useSession } from '../store/session'
+import type { CardRecord } from '../domain/types'
 
 const NOTES_DEBOUNCE_MS = 400
 
@@ -63,6 +64,11 @@ export function GradeScreen() {
     return cards.reduce((n, c) => n + (grades[gradeKey(meId, c.id)]?.grade ? 1 : 0), 0)
   }, [cards, grades, meId])
 
+  const swipeHandlers = useSwipe({
+    onLeft: () => canAdvance && go(1),
+    onRight: () => go(-1),
+  })
+
   useKeyboardGrading({
     enabled: Boolean(card && meId),
     onGrade: (g) => card && setGrade(card.id, { grade: g }),
@@ -86,13 +92,15 @@ export function GradeScreen() {
         <div className="text-sm text-muted">
           Card {currentIndex + 1} of {cards.length}. Graded {gradedCount}.
         </div>
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+          <CardSearch cards={cards} onPick={(cardId) => setPosition(cardId)} />
         {graders.length > 1 ? (
           <label className="flex items-center gap-2 text-sm">
             <span className="text-muted">Follow</span>
             <select
               value={me?.followId ?? ''}
               onChange={(e) => setFollow(e.target.value || null)}
-              className="rounded border border-edge bg-ink px-2 py-1 text-sm"
+              className="rounded border border-edge bg-ink px-2 py-1 text-base sm:text-sm"
             >
               <option value="">Nobody</option>
               {graders
@@ -105,6 +113,7 @@ export function GradeScreen() {
             </select>
           </label>
         ) : null}
+        </div>
       </div>
 
       {followTarget ? (
@@ -113,16 +122,14 @@ export function GradeScreen() {
         </Notice>
       ) : null}
 
-      <CardView card={card} display={meta.settings.cardDisplay} />
+      {/* Swipe changes cards on touch devices. Next still respects the rule
+          that an ungraded card cannot be skipped past. */}
+      <div {...swipeHandlers}>
+        <CardView card={card} display={meta.settings.cardDisplay} />
+      </div>
 
       <Panel className="space-y-5">
-        <GradeScale
-          label="Grade"
-          value={myGrade?.grade ?? null}
-          onChange={(g) => setGrade(card.id, { grade: g })}
-        />
-
-        <div className="space-y-3 border-t border-edge pt-4">
+        <div className="space-y-3 border-b border-edge pb-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -150,28 +157,145 @@ export function GradeScreen() {
         />
       </Panel>
 
-      <div className="flex items-center justify-between gap-3">
-        <Button onClick={() => go(-1)} disabled={currentIndex === 0}>
-          Previous
-        </Button>
+      {/* Spacer so the sticky bar never covers the last of the page content. */}
+      <div className="h-4" aria-hidden />
 
-        <div className="text-center text-xs text-muted">
-          {hasGrade ? null : 'Assign a grade to continue.'}
-        </div>
+      {/* The grade scale and navigation stick to the bottom of the viewport.
+          On a phone a card is roughly two screens tall, so without this you
+          scroll down to grade, then further to advance, on every one of a few
+          hundred cards. `sticky` rather than `fixed` keeps it in flow, so it
+          cannot overlap content or fight the on-screen keyboard. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-edge bg-panel/95 px-4 py-3 backdrop-blur">
+        <GradeScale
+          label="Grade"
+          value={myGrade?.grade ?? null}
+          onChange={(g) => setGrade(card.id, { grade: g })}
+        />
 
-        {canAdvance ? (
-          <Button variant="primary" onClick={() => go(1)}>
-            Next
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Button onClick={() => go(-1)} disabled={currentIndex === 0}>
+            Previous
           </Button>
-        ) : hasGrade && currentIndex === cards.length - 1 ? (
-          <span className="text-sm text-muted">Last card.</span>
-        ) : (
-          // Reserve the slot so the layout does not jump when Next appears.
-          <span className="invisible">
-            <Button>Next</Button>
-          </span>
-        )}
+
+          <div className="text-center text-xs text-muted">
+            {hasGrade ? null : 'Assign a grade to continue.'}
+          </div>
+
+          {canAdvance ? (
+            <Button variant="primary" onClick={() => go(1)}>
+              Next
+            </Button>
+          ) : hasGrade && currentIndex === cards.length - 1 ? (
+            <span className="text-sm text-muted">Last card.</span>
+          ) : (
+            // Reserve the slot so the layout does not jump when Next appears.
+            <span className="invisible">
+              <Button>Next</Button>
+            </span>
+          )}
+        </div>
       </div>
+    </div>
+  )
+}
+
+/** Horizontal swipe to change cards.
+ *
+ *  Deliberately ignores gestures that are mostly vertical, so scrolling the
+ *  page never fires a navigation, and gestures that involve more than one
+ *  finger, which are pinch-zoom on a card image.
+ */
+const SWIPE_MIN_PX = 60
+const SWIPE_MAX_OFF_AXIS_RATIO = 0.6
+
+function useSwipe({ onLeft, onRight }: { onLeft: () => void; onRight: () => void }) {
+  const start = useRef<{ x: number; y: number } | null>(null)
+
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      if (e.touches.length !== 1) {
+        start.current = null
+        return
+      }
+      start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const from = start.current
+      start.current = null
+      if (!from || e.changedTouches.length !== 1) return
+
+      const dx = e.changedTouches[0].clientX - from.x
+      const dy = e.changedTouches[0].clientY - from.y
+      if (Math.abs(dx) < SWIPE_MIN_PX) return
+      if (Math.abs(dy) > Math.abs(dx) * SWIPE_MAX_OFF_AXIS_RATIO) return
+
+      // Swiping left moves forward, matching how carousels read.
+      if (dx < 0) onLeft()
+      else onRight()
+    },
+  }
+}
+
+/** Jump straight to a card by name, for when you know what you want to revisit
+ *  rather than stepping through the queue. */
+function CardSearch({
+  cards,
+  onPick,
+}: {
+  cards: CardRecord[]
+  onPick: (cardId: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (q.length < 2) return []
+    return cards
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.faces.some((f) => f.typeLine.toLowerCase().includes(q)),
+      )
+      .slice(0, 12)
+  }, [cards, query])
+
+  return (
+    <div className="relative">
+      <Input
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        // Blur is delayed so a click on a result registers before the list closes.
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search cards"
+        aria-label="Search cards"
+        className="sm:w-64"
+      />
+      {open && matches.length > 0 ? (
+        <ul className="absolute right-0 z-20 mt-1 max-h-72 w-full min-w-64 overflow-y-auto rounded border border-edge bg-panel shadow-lg">
+          {matches.map((c) => (
+            <li key={c.id}>
+              <button
+                onClick={() => {
+                  onPick(c.id)
+                  setQuery('')
+                  setOpen(false)
+                }}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-raised"
+              >
+                <span className="min-w-0 truncate">{c.name}</span>
+                <span className="shrink-0 font-mono text-xs text-muted">
+                  {c.collectorNumber}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
@@ -230,7 +354,7 @@ function NotesBox({
         onBlur={onBlur}
         rows={3}
         placeholder="Your notes on this card."
-        className="w-full resize-y rounded border border-edge bg-ink px-3 py-2 text-sm placeholder:text-muted"
+        className="w-full resize-y rounded border border-edge bg-ink px-3 py-2 text-base placeholder:text-muted sm:text-sm"
       />
     </div>
   )

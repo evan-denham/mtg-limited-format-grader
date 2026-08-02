@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { CardImage } from '../components/CardView'
 import { GradeBadge } from '../components/GradeScale'
-import { Button, Notice, Panel, SegmentedControl, Select } from '../components/ui'
+import { Button, Input, Notice, Panel, SegmentedControl, Select } from '../components/ui'
 import { combine, isContentious, type Combined } from '../domain/grades'
 import { orderCards, RARITY_LABELS } from '../domain/ordering'
 import { BUCKET_LABELS, type CardRecord, type Grade } from '../domain/types'
@@ -57,6 +57,7 @@ export function ResultsScreen() {
   const [graderView, setGraderView] = useState<GraderView>('combined')
   const [section, setSection] = useState('all')
   const [onlyGraded, setOnlyGraded] = useState(false)
+  const [query, setQuery] = useState('')
 
   const rows = useMemo<Row[]>(() => {
     if (!meta) return []
@@ -79,9 +80,26 @@ export function ResultsScreen() {
       }
     })
 
+    // Matches name, type line and rules text, so "flying" or "Equipment"
+    // work as well as a card name.
+    const q = query.trim().toLowerCase()
     const filtered = built
       .filter((r) => section === 'all' || r.card.section === section)
       .filter((r) => !onlyGraded || r.main.count > 0)
+      .filter((r) => {
+        if (!q) return true
+        const c = r.card
+        return (
+          c.name.toLowerCase().includes(q) ||
+          c.typeLine.toLowerCase().includes(q) ||
+          c.faces.some(
+            (f) =>
+              f.name.toLowerCase().includes(q) ||
+              f.typeLine.toLowerCase().includes(q) ||
+              (f.oracleText ?? '').toLowerCase().includes(q),
+          )
+        )
+      })
 
     const dir = asc ? 1 : -1
     return filtered.sort((a, b) => {
@@ -106,7 +124,7 @@ export function ResultsScreen() {
           return a.card.name.localeCompare(b.card.name) * dir
       }
     })
-  }, [meta, cards, graders, grades, sort, asc, section, onlyGraded])
+  }, [meta, cards, graders, grades, sort, asc, section, onlyGraded, query])
 
   if (!meta) return null
 
@@ -121,6 +139,7 @@ export function ResultsScreen() {
     <div className="space-y-4">
       <div className="text-sm text-muted">
         {gradedTotal} of {cards.length} cards have at least one grade.
+        {query.trim() ? ` Showing ${rows.length} matching "${query.trim()}".` : ''}
       </div>
 
       <Panel className="space-y-4">
@@ -136,6 +155,18 @@ export function ResultsScreen() {
               { value: 'notes', label: 'Notes' },
             ]}
           />
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+              Search
+            </span>
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name, type or rules text"
+              className="sm:w-64"
+            />
+          </label>
 
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
@@ -328,10 +359,10 @@ function CardGallery({ rows, withText }: { rows: Row[]; withText: boolean }) {
           key={card.id}
           className={
             'rounded-lg border border-edge bg-panel p-3 transition-colors hover:border-edge-strong ' +
-            (withText ? 'flex gap-3' : '')
+            (withText ? 'flex flex-col gap-3 sm:flex-row' : '')
           }
         >
-          <div className={withText ? 'w-32 shrink-0' : ''}>
+          <div className={withText ? 'w-full max-w-[12rem] self-center sm:w-32 sm:self-start' : ''}>
             <CardImage src={card.faces[0]?.imageNormal ?? null} alt={card.name} />
           </div>
 
