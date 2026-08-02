@@ -22,6 +22,8 @@ joined from another device.
 | `npm run build` | Typecheck and production build |
 | `npm test` | Unit tests, no network |
 | `npm run verify` | Live checks against the real Scryfall API |
+| `npm run verify:rls` | Live checks that the access rules hold (needs `ADMIN_PASSWORD`) |
+| `npm run verify:sync` | Live two-device sync check (needs `ADMIN_PASSWORD`) |
 | `npm run lint` | oxlint |
 
 ## Enabling multi-device sync
@@ -93,6 +95,11 @@ PostgREST request headers these policies depend on, so a channel reports
 against the live project. Sync therefore polls every 4 seconds using an
 `updated_at` cursor on `grades`, skips work while the tab is hidden, and only
 emits rows that actually changed so the screen does not re-render on a timer.
+
+Multi-device grading is unaffected; only the latency changes. `npm run
+verify:sync` proves it end to end by driving the app's own `subscribe()`: one
+client subscribes, a second writes over REST, and the first observes the grade
+in about four seconds with its value, note and grader attribution intact.
 
 ## How the card pool is built
 
