@@ -239,82 +239,65 @@ function NotesView({ rows }: { rows: Row[] }) {
       .filter((x) => (x.entry?.notes ?? '').trim().length > 0)
 
   const withAny = rows.filter((r) => notesFor(r.card.id).length > 0)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-
-  // Selection follows the filtered list rather than being held independently,
-  // so changing sort or filters can never leave a stale card selected.
-  const selected = withAny.find((r) => r.card.id === selectedId) ?? withAny[0] ?? null
 
   if (withAny.length === 0) {
     return <Notice>No notes yet. Notes written while grading show up here.</Notice>
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-      <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-edge">
-        <ul className="divide-y divide-edge">
-          {withAny.map(({ card, main }) => {
-            const active = selected?.card.id === card.id
-            return (
-              <li key={card.id}>
-                <button
-                  onClick={() => setSelectedId(card.id)}
-                  className={
-                    'flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ' +
-                    (active ? 'bg-accent text-black' : 'hover:bg-panel')
-                  }
-                >
-                  <span className="min-w-0 break-words">{card.name}</span>
-                  <span
-                    className={
-                      'shrink-0 font-mono text-xs ' + (active ? 'text-black' : 'text-muted')
-                    }
-                  >
-                    {main.letter ?? '—'} · {notesFor(card.id).length}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+    <div className="space-y-3">
+      <div className="text-sm text-muted">
+        {withAny.length} {withAny.length === 1 ? 'card has' : 'cards have'} notes.
       </div>
 
-      {selected ? (
-        <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-edge bg-panel p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge pb-3">
-            <div className="min-w-0">
-              <h3 className="break-words text-lg">{selected.card.name}</h3>
-              <p className="mt-0.5 text-xs text-muted">
-                {BUCKET_LABELS[selected.card.bucket] ?? selected.card.bucket} ·{' '}
-                {RARITY_LABELS[selected.card.rarity] ?? selected.card.rarity} ·{' '}
-                {selected.card.collectorNumber}
-              </p>
+      {/* One row per card. The page scrolls rather than a nested container:
+          nested scroll regions are awkward on touch, and the card image is the
+          point of the view so it should not be squeezed into a side rail. */}
+      <ul className="space-y-3">
+        {withAny.map(({ card, main }) => (
+          <li
+            key={card.id}
+            className="flex gap-4 rounded-lg border border-edge bg-panel p-3 transition-colors hover:border-edge-strong"
+          >
+            <div className="w-28 shrink-0 sm:w-36">
+              <CardImage src={card.faces[0]?.imageNormal ?? null} alt={card.name} />
             </div>
-            <GradeBadge grade={selected.main.letter} size="large" />
-          </div>
 
-          <ul className="mt-4 space-y-4">
-            {notesFor(selected.card.id).map(({ grader, entry }) => (
-              <li key={grader.id}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">{grader.name}</span>
-                  <span className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted">
-                    {entry?.grade ?? '—'}
-                  </span>
-                  {entry?.isBuildaround ? (
-                    <span className="rounded border border-warn/50 px-1.5 py-0.5 text-xs text-warn">
-                      Build-around {entry.buildaroundGrade ?? '—'}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted">
-                  {entry?.notes}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3 border-b border-edge pb-2">
+                <p className="text-xs text-muted">
+                  {BUCKET_LABELS[card.bucket] ?? card.bucket} ·{' '}
+                  {RARITY_LABELS[card.rarity] ?? card.rarity} · {card.collectorNumber}
                 </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+                <GradeBadge grade={main.letter} size="large" />
+              </div>
+
+              <ul className="mt-3 space-y-3">
+                {notesFor(card.id).map(({ grader, entry }) => (
+                  <li key={grader.id}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{grader.name}</span>
+                      <span className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted">
+                        {entry?.grade ?? '—'}
+                      </span>
+                      {entry?.isBuildaround ? (
+                        <span className="rounded border border-warn/50 px-1.5 py-0.5 text-xs text-warn">
+                          Build-around {entry.buildaroundGrade ?? '—'}
+                        </span>
+                      ) : null}
+                    </div>
+                    {/* whitespace-pre-wrap keeps the grader's line breaks;
+                        break-words stops one long token widening the row. */}
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted">
+                      {entry?.notes}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
