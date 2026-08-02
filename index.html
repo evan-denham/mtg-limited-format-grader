@@ -10,19 +10,27 @@
     />
     <meta name="theme-color" content="#0f1115" />
 
-    <!-- Tab icon and home-screen icon. thumbnail.png is served from public/,
-         so Vite copies it verbatim and the base path is applied on build. -->
-    <link rel="icon" type="image/png" href="./thumbnail.png" />
-    <link rel="apple-touch-icon" href="./thumbnail.png" />
+    <!-- Tab icon: a drawn glyph, not the photo. Tabs render at 16px, where a
+         face becomes an indistinct blob. -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
-    <!-- Link preview, for when a session URL is pasted into a chat. -->
+    <!-- Home-screen icon: the photo, padded square and scaled to the 180px
+         iOS wants, so it is not stretched from its native 139x126. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+
+    <!-- Link preview when a session URL is pasted into a chat. og:image must
+         be an absolute URL; most scrapers will not resolve a relative one. -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Limited Format Grader" />
     <meta
       property="og:description"
       content="Grade every card in a Magic set for Limited, card by card, with one or more graders."
     />
-    <meta property="og:image" content="./thumbnail.png" />
+    <meta
+      property="og:image"
+      content="https://evan-denham.github.io/mtg-limited-format-grader/preview.png"
+    />
+    <meta property="og:url" content="https://evan-denham.github.io/mtg-limited-format-grader/" />
     <meta name="twitter:card" content="summary" />
   </head>
   <body>

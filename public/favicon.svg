@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <title>Limited Format Grader</title>
+  <!-- Tab icons render at 16px, where a photograph turns to mush. This is a
+       single high-contrast letter instead. Drawn as a path rather than <text>
+       so it does not depend on a font being available to the renderer. -->
+  <rect width="32" height="32" rx="7" fill="#4a9eff" />
+  <path
+    fill="#0f1115"
+    fill-rule="evenodd"
+    d="M16 5.5 L24.8 26.5 L20.2 26.5 L18.5 22.2 L13.5 22.2 L11.8 26.5 L7.2 26.5 Z
+       M16 12.6 L14.3 18.4 L17.7 18.4 Z"
+  />
+</svg>
