@@ -13,7 +13,7 @@ import type {
   GradingSettings,
   SessionMeta,
 } from '../domain/types'
-import { isBackendConfigured, supabase } from './client'
+import { clientFor, isBackendConfigured } from './client'
 
 export interface LoadedSession {
   meta: SessionMeta
@@ -145,13 +145,27 @@ const localBackend: Backend = {
 // --- Supabase implementation ---
 
 function makeSupabaseBackend(): Backend {
-  const db = supabase
-  if (!db) return localBackend
+  /** Row level security (migration 0003) checks a session id or code sent as a
+   *  request header, and supabase-js fixes headers at construction, so every
+   *  call resolves the client for its own session context. */
+  const forSession = (sessionId: string) => {
+    const c = clientFor({ sessionId })
+    if (!c) throw new Error('Supabase is not configured')
+    return c
+  }
+  const forCode = (code: string) => {
+    const c = clientFor({ code })
+    if (!c) throw new Error('Supabase is not configured')
+    return c
+  }
 
   return {
     configured: true,
 
     async createSession(args) {
+      // The code is presented up front so the INSERT can return the new row:
+      // RETURNING is subject to the select policy.
+      const db = forCode(args.code)
       const { data: session, error } = await db
         .from('sessions')
         .insert({
@@ -193,6 +207,7 @@ function makeSupabaseBackend(): Backend {
     },
 
     async loadSession(sessionId) {
+      const db = forSession(sessionId)
       const { data: s, error } = await db
         .from('sessions')
         .select('*')
@@ -224,6 +239,7 @@ function makeSupabaseBackend(): Backend {
     },
 
     async findSessionByCode(code) {
+      const db = forCode(code)
       const { data } = await db
         .from('sessions')
         .select('id')
@@ -234,7 +250,7 @@ function makeSupabaseBackend(): Backend {
 
     async saveGrade(sessionId, grade) {
       if (!sessionId) return
-      const { error } = await db.from('grades').upsert(
+      const { error } = await forSession(sessionId).from('grades').upsert(
         {
           session_id: sessionId,
           grader_id: grade.graderId,
@@ -252,20 +268,24 @@ function makeSupabaseBackend(): Backend {
 
     async savePosition(sessionId, graderId, cardId) {
       if (!sessionId) return
-      await db.from('graders').update({ current_card_id: cardId }).eq('id', graderId)
+      await forSession(sessionId)
+        .from('graders')
+        .update({ current_card_id: cardId })
+        .eq('id', graderId)
     },
 
     async saveFollow(sessionId, graderId, followId) {
       if (!sessionId) return
-      await db.from('graders').update({ follow_id: followId }).eq('id', graderId)
+      await forSession(sessionId).from('graders').update({ follow_id: followId }).eq('id', graderId)
     },
 
     async saveSettings(sessionId, settings) {
       if (!sessionId) return
-      await db.from('sessions').update({ settings }).eq('id', sessionId)
+      await forSession(sessionId).from('sessions').update({ settings }).eq('id', sessionId)
     },
 
-    async claimGrader(_sessionId, graderId, pin) {
+    async claimGrader(sessionId, graderId, pin) {
+      const db = forSession(sessionId)
       const { data } = await db.from('graders').select('pin').eq('id', graderId).maybeSingle()
       const existing = (data as { pin: string | null } | null)?.pin ?? null
 
@@ -279,11 +299,12 @@ function makeSupabaseBackend(): Backend {
     },
 
     async deleteSession(sessionId) {
-      const { error } = await db.from('sessions').delete().eq('id', sessionId)
+      const { error } = await forSession(sessionId).from('sessions').delete().eq('id', sessionId)
       if (error) throw new Error(`Could not delete session: ${error.message}`)
     },
 
     subscribe(sessionId, handlers) {
+      const db = forSession(sessionId)
       const channel = db
         .channel(`session:${sessionId}`)
         .on(
