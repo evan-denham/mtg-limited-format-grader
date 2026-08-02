@@ -96,6 +96,7 @@ interface GradeRow {
   session_id: string
   grader_id: string
   card_id: string
+  updated_at: string
   grade: string | null
   is_buildaround: boolean
   buildaround_grade: string | null
@@ -119,6 +120,11 @@ const toGrade = (r: GradeRow): Grade => ({
   buildaroundGrade: (r.buildaround_grade as Grade['grade']) ?? null,
   notes: r.notes ?? '',
 })
+
+/** How often a client checks for other graders' changes. */
+const POLL_INTERVAL_MS = 4000
+/** Rewind on the first poll to absorb client/server clock skew. */
+const SKEW_MARGIN_MS = 60_000
 
 const ACCENTS = ['#c8a15a', '#6aa9d6', '#c26b6b', '#7fb87f', '#a98ac9', '#d1985c']
 
@@ -317,38 +323,88 @@ function makeSupabaseBackend(): Backend {
       if (data) throw new Error('Delete was refused. Check the admin password.')
     },
 
+    /** Polling, not Realtime.
+     *
+     *  Realtime evaluates row level security from the connection JWT and never
+     *  sees the PostgREST request headers these policies depend on, so a
+     *  subscription reports SUBSCRIBED then immediately CLOSED and no change
+     *  is ever delivered. Verified against the live project by
+     *  scripts/verify-rls.ts. Polling is the workable alternative; a few
+     *  seconds of latency is imperceptible while grading.
+     */
     subscribe(sessionId, handlers) {
       const db = forSession(sessionId)
-      const channel = db
-        .channel(`session:${sessionId}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'grades', filter: `session_id=eq.${sessionId}` },
-          (payload) => {
-            const row = payload.new as GradeRow
-            if (row?.card_id) handlers.onGrade(toGrade(row))
-          },
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'graders', filter: `session_id=eq.${sessionId}` },
-          (payload) => {
-            const row = payload.new as GraderRow
-            if (row?.id) handlers.onGrader(toGrader(row))
-          },
-        )
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` },
-          (payload) => {
-            const row = payload.new as SessionRow
-            if (row?.settings) handlers.onSettings(row.settings)
-          },
-        )
-        .subscribe()
+      let stopped = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+
+      // Start slightly in the past so clock skew between this device and the
+      // database cannot cause the first poll to miss a recent write.
+      let since = new Date(Date.now() - SKEW_MARGIN_MS).toISOString()
+
+      // Only emit rows that actually changed, or every poll would replace
+      // objects in the store and re-render the whole screen on a timer.
+      const graderSnapshots = new Map<string, string>()
+      let settingsSnapshot = ''
+
+      const poll = async () => {
+        try {
+          const { data: gradeRows } = await db
+            .from('grades')
+            .select('*')
+            .eq('session_id', sessionId)
+            .gt('updated_at', since)
+
+          for (const row of (gradeRows ?? []) as GradeRow[]) {
+            handlers.onGrade(toGrade(row))
+            if (row.updated_at > since) since = row.updated_at
+          }
+
+          const { data: graderRows } = await db
+            .from('graders')
+            .select('*')
+            .eq('session_id', sessionId)
+
+          for (const row of (graderRows ?? []) as GraderRow[]) {
+            const fingerprint = JSON.stringify(row)
+            if (graderSnapshots.get(row.id) !== fingerprint) {
+              graderSnapshots.set(row.id, fingerprint)
+              handlers.onGrader(toGrader(row))
+            }
+          }
+
+          const { data: sessionRow } = await db
+            .from('sessions')
+            .select('settings')
+            .eq('id', sessionId)
+            .maybeSingle()
+
+          const settings = (sessionRow as { settings: GradingSettings } | null)?.settings
+          if (settings) {
+            const fingerprint = JSON.stringify(settings)
+            if (settingsSnapshot && settingsSnapshot !== fingerprint) {
+              handlers.onSettings(settings)
+            }
+            settingsSnapshot = fingerprint
+          }
+        } catch {
+          // Transient failure; the next tick retries rather than tearing down.
+        }
+      }
+
+      const tick = async () => {
+        if (stopped) return
+        // Skip work for a backgrounded tab; catch up when it returns.
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          await poll()
+        }
+        if (!stopped) timer = setTimeout(() => void tick(), POLL_INTERVAL_MS)
+      }
+
+      timer = setTimeout(() => void tick(), POLL_INTERVAL_MS)
 
       return () => {
-        void db.removeChannel(channel)
+        stopped = true
+        if (timer) clearTimeout(timer)
       }
     },
   }

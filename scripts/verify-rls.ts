@@ -5,14 +5,13 @@
  *    - Only an admin may create or delete a session.
  *    - A grader needs BOTH the session code (or id) AND the session password.
  *    - The admin password itself is unreadable through the API.
- *    - Realtime still delivers under gated policies (the likeliest breakage).
+ *    - The updated_at cursor that sync polls on actually works.
  *
  *  Run with:  ADMIN_PASSWORD=your-password npm run verify:rls
  *  Creates a throwaway session and removes it again.
  */
 
 import { readFileSync } from 'node:fs'
-import { createClient } from '@supabase/supabase-js'
 
 const env = Object.fromEntries(
   readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
@@ -193,13 +192,40 @@ async function main() {
     `HTTP ${cfg.status}`,
   )
 
-  console.log('\n=== realtime under gated policies ===')
-  const realtimeOk = await testRealtime(SID, GID)
+  console.log('\n=== polling picks up another device write ===')
+  // Realtime cannot work under these policies: it evaluates RLS from the
+  // connection JWT and never sees these request headers, so a channel reports
+  // SUBSCRIBED then immediately CLOSED and no change is ever delivered. Sync
+  // therefore polls grades by updated_at, which is what these two checks cover.
+  const before = new Date(Date.now() - 60_000).toISOString()
+  await rest('grades', {
+    method: 'POST',
+    headers: unlocked,
+    body: JSON.stringify({ session_id: SID, grader_id: GID, card_id: 'poll-probe', grade: 'C' }),
+  })
+  const changed = rows(
+    (
+      await rest(
+        `grades?session_id=eq.${SID}&updated_at=gt.${before}&select=card_id,updated_at`,
+        { headers: unlocked },
+      )
+    ).body,
+  ) as { card_id: string }[]
   check(
-    'realtime delivers a grade insert to a subscribed client',
-    realtimeOk,
-    realtimeOk ? '' : 'RLS blocks realtime; sync must fall back to polling',
+    'an updated_at cursor query returns the new grade',
+    changed.some((g) => g.card_id === 'poll-probe'),
+    `${changed.length} changed rows`,
   )
+
+  const future = new Date(Date.now() + 60_000).toISOString()
+  const none = rows(
+    (
+      await rest(`grades?session_id=eq.${SID}&updated_at=gt.${future}&select=card_id`, {
+        headers: unlocked,
+      })
+    ).body,
+  )
+  check('a future cursor returns nothing, so polling converges', none.length === 0)
 
   console.log('\n=== cleanup ===')
   await rest(`sessions?id=eq.${SID}`, {
@@ -217,50 +243,6 @@ async function main() {
 
   console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`)
   process.exit(failures === 0 ? 0 : 1)
-}
-
-/** Subscribes with the session headers, writes a grade, waits for the event. */
-async function testRealtime(sessionId: string, graderId: string): Promise<boolean> {
-  const client = createClient(URL_, KEY, {
-    auth: { persistSession: false },
-    global: { headers: { 'x-session-id': sessionId, 'x-session-password': PW } },
-  })
-
-  return new Promise<boolean>((resolve) => {
-    let settled = false
-    const done = (v: boolean) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      void client.removeAllChannels()
-      resolve(v)
-    }
-    const timer = setTimeout(() => done(false), 12_000)
-
-    client
-      .channel(`rlstest:${sessionId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'grades', filter: `session_id=eq.${sessionId}` },
-        () => done(true),
-      )
-      .subscribe((status) => {
-        console.log(`    channel status: ${status}`)
-        if (status === 'SUBSCRIBED') {
-          void rest('grades', {
-            method: 'POST',
-            headers: { 'x-session-id': sessionId, 'x-session-password': PW },
-            body: JSON.stringify({
-              session_id: sessionId,
-              grader_id: graderId,
-              card_id: 'rt-probe',
-              grade: 'B',
-            }),
-          })
-        }
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') done(false)
-      })
-  })
 }
 
 main().catch((err) => {

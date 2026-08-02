@@ -28,8 +28,12 @@ joined from another device.
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor -> New query** and run each migration in
-   [`supabase/migrations/`](supabase/migrations/) in order:
-   `0001_init.sql`, then `0002_pins_and_delete.sql`.
+   [`supabase/migrations/`](supabase/migrations/) in order: `0001`, `0002`,
+   `0003`, then `0004`.
+
+   When you run `0004`, change the admin password placeholder **in the SQL
+   editor**, not in the file. The file is tracked and this repository is
+   public; `npm test` fails if a real password is saved into it.
 3. Copy `.env.example` to `.env.local` and fill in the values from
    **Project Settings -> API**:
    - `VITE_SUPABASE_URL`
@@ -43,24 +47,52 @@ service_role key bypasses row level security entirely.
 Free-tier projects pause after 7 days of inactivity. If a session sits idle
 longer than that, resume it from the Supabase dashboard.
 
-## Security posture
+## Roles and access
 
-There is no authentication. **The session code is the credential:** anyone with
-it can read and write that session.
+Three secrets with distinct jobs:
 
-The host assigns each grader a four-digit PIN when creating the session and can
-look them up again under Settings. PINs are stored **in the clear**, because a
-host who cannot read a PIN back cannot remind anyone what theirs is. That gives
-up nothing: the anon key could always read the graders table, so hashing was
-never protecting anything here. The PIN's only job is stopping graders from
-entering grades as each other by accident. Do not reuse a PIN that means
-anything elsewhere.
+| Secret | Held by | Grants |
+| --- | --- | --- |
+| Admin password | whoever runs sessions | create sessions, add graders, delete sessions |
+| Session password | everyone grading that session | read and grade that one session |
+| Grader PIN | one person | which grader you are |
 
-PINs are stripped from the JSON export, since that file gets mailed around.
+All three are enforced by row level security in Postgres, not in the browser.
 
-That is a deliberate trade for grading a set with friends. If it ever needs to
-be genuinely private, the upgrade is Supabase anonymous sign-in with policies
-keyed on `auth.uid()`.
+**The admin password is the only genuinely secret value.** It lives in
+`app_config`, a table with RLS enabled and no policies at all, so the anon role
+can never read it; only the `SECURITY DEFINER` `is_admin()` function can. It is
+typed by the admin, sent as a request header and compared inside the database,
+so it never enters the JavaScript bundle and reading the bundle does not reveal
+it. Change it with:
+
+```sql
+update public.app_config set value = 'new-password' where key = 'admin_password';
+```
+
+**The anon key is public and that is fine.** A deployed static site must ship
+it, and it is designed for that. Since migration 0003 it grants nothing on its
+own: every policy also requires a session id or code *and* the session
+password. `npm run verify:rls` asserts this against the live project, including
+that a bare `select` on each table returns zero rows.
+
+**Grader PINs are stored in the clear**, so the admin can read one back to
+remind someone. That gives up nothing, because anyone already inside a session
+could read that table. The PIN prevents accidental cross-grading, not access.
+PINs are stripped from the JSON export.
+
+**Anyone with a session code and its password can grade it, and can pass both
+on.** There is no per-person identity. If that matters, the upgrade is Supabase
+anonymous sign-in with policies keyed on `auth.uid()`.
+
+## Multi-device sync uses polling, not Realtime
+
+Supabase Realtime evaluates RLS from the connection JWT and never sees the
+PostgREST request headers these policies depend on, so a channel reports
+`SUBSCRIBED` and then immediately `CLOSED` with no changes delivered. Confirmed
+against the live project. Sync therefore polls every 4 seconds using an
+`updated_at` cursor on `grades`, skips work while the tab is hidden, and only
+emits rows that actually changed so the screen does not re-render on a timer.
 
 ## How the card pool is built
 

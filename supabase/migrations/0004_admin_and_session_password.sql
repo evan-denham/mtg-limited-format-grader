@@ -5,8 +5,16 @@
 -- Rollback: 0004_rollback.sql restores 0003 behaviour.
 
 -- ###########################################################################
--- EDIT THE PASSWORD ON THE NEXT LINE BEFORE RUNNING THIS FILE.
+-- SET THE ADMIN PASSWORD WHEN YOU RUN THIS, NOT IN THIS FILE.
+--
+-- This file is tracked by git and the repository is public. Paste it into the
+-- Supabase SQL Editor, change the placeholder there, and run it. Do not save
+-- the real password back here.
+--
 -- Anyone who knows it can create and delete sessions.
+--
+-- To change it later, run only this, again in the SQL Editor:
+--   update public.app_config set value = 'new-password' where key = 'admin_password';
 -- ###########################################################################
 
 create table if not exists public.app_config (
@@ -15,7 +23,7 @@ create table if not exists public.app_config (
 );
 
 insert into public.app_config (key, value)
-values ('admin_password', 'CHANGE-ME-BEFORE-RUNNING')
+values ('admin_password', 'CHANGE-ME-IN-THE-SQL-EDITOR')
 on conflict (key) do update set value = excluded.value;
 
 -- RLS on with NO policies at all: the anon role can never read this table.
