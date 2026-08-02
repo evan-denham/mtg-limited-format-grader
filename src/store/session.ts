@@ -41,6 +41,7 @@ export interface SessionState {
   setPosition: (cardId: string) => void
   setFollow: (targetId: string | null) => void
   updateSettings: (patch: Partial<GradingSettings>) => void
+  addGrader: (name: string, pin: string, adminPassword: string) => Promise<void>
   applyRemoteGrade: (grade: Grade) => void
   applyRemoteGrader: (grader: Grader) => void
   applyRemoteSettings: (settings: GradingSettings) => void
@@ -166,6 +167,37 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ meta: next })
     persist(get())
     void backend.saveSettings(meta.id, next.settings)
+  },
+
+  async addGrader(name, pin, adminPassword) {
+    const { meta, graders } = get()
+    if (!meta) return
+
+    const trimmed = name.trim()
+    if (graders.some((g) => g.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`There is already a grader called "${trimmed}" in this session.`)
+    }
+
+    const created = await backend.addGrader({
+      sessionId: meta.id,
+      name: trimmed,
+      pin,
+      accentIndex: graders.length,
+      adminPassword,
+    })
+
+    // Local-only mode returns null, so mint the row client-side instead.
+    const grader: Grader = created ?? {
+      id: crypto.randomUUID(),
+      name: trimmed,
+      currentCardId: null,
+      followId: null,
+      accent: ['#4a9eff', '#e0a938', '#ff6b6b', '#7fb87f', '#a98ac9'][graders.length % 5],
+      pin,
+    }
+
+    set({ graders: [...graders, grader] })
+    persist(get())
   },
 
   applyRemoteGrade(grade) {

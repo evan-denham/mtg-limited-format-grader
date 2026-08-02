@@ -58,6 +58,15 @@ export interface Backend {
   saveSettings(sessionId: string, settings: GradingSettings): Promise<void>
   claimGrader(sessionId: string, graderId: string, pin: string): Promise<'ok' | 'wrong-pin'>
   deleteSession(sessionId: string, adminPassword: string): Promise<void>
+  /** Adds a grader to a session already in progress. Admin-only, matching the
+   *  policy on inserts into `graders`. */
+  addGrader(args: {
+    sessionId: string
+    name: string
+    pin: string
+    accentIndex: number
+    adminPassword: string
+  }): Promise<Grader | null>
   subscribe(sessionId: string, handlers: RealtimeHandlers): () => void
 }
 
@@ -149,6 +158,9 @@ const localBackend: Backend = {
     return 'ok'
   },
   async deleteSession() {},
+  async addGrader() {
+    return null
+  },
   subscribe() {
     return () => {}
   },
@@ -296,6 +308,32 @@ function makeSupabaseBackend(): Backend {
     async saveSettings(sessionId, settings) {
       if (!sessionId) return
       await forSession(sessionId).from('sessions').update({ settings }).eq('id', sessionId)
+    },
+
+    async addGrader({ sessionId, name, pin, accentIndex, adminPassword }) {
+      const db = asAdmin(adminPassword, { sessionId })
+      const { data, error } = await db
+        .from('graders')
+        .insert({
+          session_id: sessionId,
+          name,
+          pin,
+          accent: ACCENTS[accentIndex % ACCENTS.length],
+        })
+        .select('*')
+        .single()
+
+      if (error) {
+        // 23505 is the unique(session_id, name) constraint.
+        if (error.code === '23505') {
+          throw new Error(`There is already a grader called "${name}" in this session.`)
+        }
+        if (/row-level security|policy/i.test(error.message)) {
+          throw new Error('The admin password was not accepted, so no grader was added.')
+        }
+        throw new Error(`Could not add grader: ${error.message}`)
+      }
+      return toGrader(data as GraderRow)
     },
 
     async claimGrader(sessionId, graderId, pin) {

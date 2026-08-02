@@ -24,6 +24,7 @@ joined from another device.
 | `npm run verify` | Live checks against the real Scryfall API |
 | `npm run verify:rls` | Live checks that the access rules hold (needs `ADMIN_PASSWORD`) |
 | `npm run verify:sync` | Live two-device sync check (needs `ADMIN_PASSWORD`) |
+| `npm run verify:add-grader` | Live check that graders can join mid-session (needs `ADMIN_PASSWORD`) |
 | `npm run lint` | oxlint |
 
 ## Enabling multi-device sync
@@ -58,6 +59,11 @@ Three secrets with distinct jobs:
 | Admin password | whoever runs sessions | create sessions, add graders, delete sessions |
 | Session password | everyone grading that session | read and grade that one session |
 | Grader PIN | one person | which grader you are |
+
+Graders can be added after a session has started, from Settings, by the host.
+It needs the admin password, matching the policy on inserts into `graders`.
+A grader who joins late starts with nothing graded; combined grades ignore
+cards they never reached rather than counting those as `F`.
 
 All three are enforced by row level security in Postgres, not in the browser.
 
