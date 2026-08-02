@@ -12,6 +12,7 @@ import { Button, Input, Notice, Panel } from '../components/ui'
 import { applyModifier, type GradeLetter } from '../domain/grades'
 import { gradeKey, useOrderedCards, useSession } from '../store/session'
 import type { CardRecord } from '../domain/types'
+import * as local from '../storage/local'
 
 const NOTES_DEBOUNCE_MS = 400
 
@@ -63,6 +64,8 @@ export function GradeScreen() {
     if (!meId) return 0
     return cards.reduce((n, c) => n + (grades[gradeKey(meId, c.id)]?.grade ? 1 : 0), 0)
   }, [cards, grades, meId])
+
+  const [gradeBarOpen, setGradeBarOpen] = useState(() => local.loadGradeBarOpen())
 
   const swipeHandlers = useSwipe({
     onLeft: () => canAdvance && go(1),
@@ -166,11 +169,41 @@ export function GradeScreen() {
           hundred cards. `sticky` rather than `fixed` keeps it in flow, so it
           cannot overlap content or fight the on-screen keyboard. */}
       <div className="sticky bottom-0 -mx-4 border-t border-edge bg-panel/95 px-4 py-3 backdrop-blur">
-        <GradeScale
-          label="Grade"
-          value={myGrade?.grade ?? null}
-          onChange={(g) => setGrade(card.id, { grade: g })}
-        />
+        {/* Collapsible so the card can be read without the scale covering it.
+            Navigation stays visible either way: hiding the grades should not
+            also cost you the ability to move between cards. The preference is
+            per-device and persists, or it would reset on every card. */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted">
+            Grade
+          </span>
+          <span className="flex items-center gap-3">
+            <span className="font-mono text-sm">
+              {myGrade?.grade ?? <span className="text-muted">Not graded</span>}
+            </span>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const next = !gradeBarOpen
+                setGradeBarOpen(next)
+                local.saveGradeBarOpen(next)
+              }}
+              aria-expanded={gradeBarOpen}
+              className="text-xs"
+            >
+              {gradeBarOpen ? 'Hide grades' : 'Show grades'}
+            </Button>
+          </span>
+        </div>
+
+        {gradeBarOpen ? (
+          <div className="mt-2">
+            <GradeScale
+              value={myGrade?.grade ?? null}
+              onChange={(g) => setGrade(card.id, { grade: g })}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-center justify-between gap-3">
           <Button onClick={() => go(-1)} disabled={currentIndex === 0}>
@@ -178,7 +211,11 @@ export function GradeScreen() {
           </Button>
 
           <div className="text-center text-xs text-muted">
-            {hasGrade ? null : 'Assign a grade to continue.'}
+            {hasGrade
+              ? null
+              : gradeBarOpen
+                ? 'Assign a grade to continue.'
+                : 'Show grades to continue.'}
           </div>
 
           {canAdvance ? (

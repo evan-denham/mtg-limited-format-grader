@@ -179,3 +179,27 @@ export function clearAdminPassword(): void {
     /* ignore */
   }
 }
+
+// --- UI preferences ---
+// Per-device, not per-session: how someone likes the grading bar is a property
+// of their screen, not of the set being graded.
+
+const GRADE_BAR_KEY = 'mtglfg.ui.gradeBarOpen'
+
+export function loadGradeBarOpen(): boolean {
+  try {
+    // Default open. Only an explicit "0" collapses it, so a cleared or
+    // corrupt value fails toward the controls being visible.
+    return localStorage.getItem(GRADE_BAR_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+export function saveGradeBarOpen(open: boolean): void {
+  try {
+    localStorage.setItem(GRADE_BAR_KEY, open ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
