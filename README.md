@@ -32,8 +32,9 @@ joined from another device.
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor -> New query** and run each migration in
-   [`supabase/migrations/`](supabase/migrations/) in order: `0001`, `0002`,
-   `0003`, then `0004`.
+   [`supabase/migrations/`](supabase/migrations/) in numeric order, `0001`
+   through `0006`. Skip the `*_rollback.sql` files; those exist to undo a
+   migration if one causes trouble.
 
    When you run `0004`, change the admin password placeholder **in the SQL
    editor**, not in the file. The file is tracked and this repository is
@@ -78,7 +79,8 @@ It needs the admin password, matching the policy on inserts into `graders`.
 A grader who joins late starts with nothing graded; combined grades ignore
 cards they never reached rather than counting those as `F`.
 
-All three are enforced by row level security in Postgres, not in the browser.
+All of these are enforced by row level security in Postgres, not in the
+browser.
 
 **The admin password is the only genuinely secret value.** It lives in
 `app_config`, a table with RLS enabled and no policies at all, so the anon role
