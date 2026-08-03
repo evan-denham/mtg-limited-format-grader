@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardView } from '../components/CardView'
 import { GradeScale } from '../components/GradeScale'
 import { Button, Input, Notice, Panel } from '../components/ui'
-import { applyModifier, type GradeLetter } from '../domain/grades'
+import { applyModifier, combine, isContentious, type GradeLetter } from '../domain/grades'
 import { gradeKey, useOrderedCards, useSession } from '../store/session'
 import type { CardRecord } from '../domain/types'
 import * as local from '../storage/local'
@@ -128,7 +128,11 @@ export function GradeScreen() {
       {/* Swipe changes cards on touch devices. Next still respects the rule
           that an ungraded card cannot be skipped past. */}
       <div {...swipeHandlers}>
-        <CardView card={card} display={meta.settings.cardDisplay} />
+        <CardView
+          card={card}
+          display={meta.settings.cardDisplay}
+          footer={<GradesSoFar cardId={card.id} />}
+        />
       </div>
 
       <Panel className="space-y-5">
@@ -232,6 +236,53 @@ export function GradeScreen() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Everyone's grade for the current card, shown under the rules text so it is
+ *  visible while grading rather than only on the results tab. */
+function GradesSoFar({ cardId }: { cardId: string }) {
+  const graders = useSession((s) => s.graders)
+  const grades = useSession((s) => s.grades)
+  const meId = useSession((s) => s.meId)
+
+  const entries = graders.map((g) => ({ grader: g, entry: grades[gradeKey(g.id, cardId)] ?? null }))
+  const letters = entries.map((e) => e.entry?.grade ?? null)
+  const combined = combine(letters)
+
+  return (
+    <div className="rounded border border-edge bg-panel p-4">
+      <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-edge pb-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted">Grades</span>
+        {combined.count > 1 ? (
+          <span className="text-xs text-muted">
+            Combined {combined.letter}
+            {isContentious(combined) ? ` · ${combined.spread} steps apart` : ''}
+          </span>
+        ) : null}
+      </div>
+
+      <ul className="space-y-1.5">
+        {entries.map(({ grader, entry }) => (
+          <li key={grader.id} className="flex items-center justify-between gap-3 text-sm">
+            <span className={grader.id === meId ? 'font-medium' : 'text-muted'}>
+              {grader.name}
+              {grader.id === meId ? ' (you)' : ''}
+            </span>
+            <span className="flex items-center gap-2">
+              {entry?.isBuildaround ? (
+                <span className="rounded border border-warn/50 px-1.5 py-0.5 text-xs text-warn">
+                  Build-around {entry.buildaroundGrade ?? '—'}
+                </span>
+              ) : null}
+              <span className="font-mono">
+                {entry?.grade ?? <span className="text-muted">not graded</span>}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

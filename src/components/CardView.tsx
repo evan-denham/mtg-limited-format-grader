@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { CardRecord } from '../domain/types'
+import type { CardFace, CardRecord } from '../domain/types'
 import { BUCKET_LABELS } from '../domain/types'
 import { RARITY_LABELS } from '../domain/ordering'
 
@@ -29,9 +29,12 @@ function OracleText({ text }: { text: string | null }) {
 export function CardView({
   card,
   display,
+  footer,
 }: {
   card: CardRecord
   display: 'full' | 'art'
+  /** Rendered under the rules text. Used to show grades while grading. */
+  footer?: React.ReactNode
 }) {
   const [faceIndex, setFaceIndex] = useState(0)
 
@@ -39,13 +42,20 @@ export function CardView({
   // card leaks onto the next card.
   useEffect(() => setFaceIndex(0), [card.id])
 
+  // Adventures, splits and flip cards print every face on ONE image, so there
+  // is nothing to flip to and every face's rules text has to be shown at once.
+  // Rendering only faces[0] hid the entire Adventure half of 16 cards in The
+  // Hobbit. `multiFaced` means the faces have separate images, which is a
+  // different thing from having several faces.
+  const sharesOneImage = !card.multiFaced && card.faces.length > 1
+
   const face = card.faces[Math.min(faceIndex, card.faces.length - 1)] ?? card.faces[0]
   const image = display === 'art' ? (face?.imageArt ?? face?.imageNormal) : face?.imageNormal
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
       <div className="space-y-3">
-        <CardImage src={image ?? null} alt={face?.name ?? card.name} />
+        <CardImage src={image ?? null} alt={card.name} />
 
         {card.multiFaced ? (
           <button
@@ -60,11 +70,15 @@ export function CardView({
 
       <div className="min-w-0 space-y-4">
         <div>
-          <h2 className="text-2xl font-medium">{face?.name ?? card.name}</h2>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-            <span>{face?.typeLine}</span>
-            <ManaCost cost={face?.manaCost ?? null} />
-          </div>
+          <h2 className="text-2xl font-medium">
+            {sharesOneImage ? card.name : (face?.name ?? card.name)}
+          </h2>
+          {!sharesOneImage ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+              <span>{face?.typeLine}</span>
+              <ManaCost cost={face?.manaCost ?? null} />
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2 text-xs">
@@ -76,33 +90,22 @@ export function CardView({
           {card.section !== 'main' ? <Tag>Bonus sheet</Tag> : null}
         </div>
 
-        <div className="rounded border border-edge bg-panel p-4">
-          <OracleText text={face?.oracleText ?? null} />
-          {face?.flavorText ? (
-            <p className="mt-3 border-t border-edge pt-3 text-sm italic text-muted">
-              {face.flavorText}
-            </p>
-          ) : null}
-          {face?.power != null && face?.toughness != null ? (
-            <p className="mt-3 text-right font-mono text-sm">
-              {face.power}/{face.toughness}
-            </p>
-          ) : null}
-          {face?.loyalty != null ? (
-            <p className="mt-3 text-right font-mono text-sm">Loyalty {face.loyalty}</p>
-          ) : null}
-          {face?.defense != null ? (
-            <p className="mt-3 text-right font-mono text-sm">Defense {face.defense}</p>
-          ) : null}
-        </div>
+        {sharesOneImage ? (
+          // Every face printed on the one image: show them all, in order.
+          <div className="space-y-3">
+            {card.faces.map((f, i) => (
+              <FaceText key={i} face={f} showHeading />
+            ))}
+          </div>
+        ) : (
+          <FaceText face={face} />
+        )}
 
         {/* The back face's rules text matters for grading even when the front
             image is showing, so surface it rather than hiding it behind flip. */}
         {card.multiFaced && card.faces.length > 1 ? (
           <details className="rounded border border-edge bg-panel p-3">
-            <summary className="cursor-pointer text-sm text-muted">
-              Other faces
-            </summary>
+            <summary className="cursor-pointer text-sm text-muted">Other faces</summary>
             <div className="mt-3 space-y-4">
               {card.faces
                 .filter((_, i) => i !== faceIndex)
@@ -118,7 +121,47 @@ export function CardView({
             </div>
           </details>
         ) : null}
+
+        {footer}
       </div>
+    </div>
+  )
+}
+
+/** One face's rules box. `showHeading` adds the face name, type and cost, which
+ *  is needed when several faces are stacked and would otherwise run together. */
+function FaceText({ face, showHeading }: { face?: CardFace; showHeading?: boolean }) {
+  if (!face) return null
+  return (
+    <div className="rounded border border-edge bg-panel p-4">
+      {showHeading ? (
+        <div className="mb-2 border-b border-edge pb-2">
+          <p className="font-medium">{face.name}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-muted">
+            <span>{face.typeLine}</span>
+            <ManaCost cost={face.manaCost} />
+          </div>
+        </div>
+      ) : null}
+
+      <OracleText text={face.oracleText} />
+
+      {face.flavorText ? (
+        <p className="mt-3 border-t border-edge pt-3 text-sm italic text-muted">
+          {face.flavorText}
+        </p>
+      ) : null}
+      {face.power != null && face.toughness != null ? (
+        <p className="mt-3 text-right font-mono text-sm">
+          {face.power}/{face.toughness}
+        </p>
+      ) : null}
+      {face.loyalty != null ? (
+        <p className="mt-3 text-right font-mono text-sm">Loyalty {face.loyalty}</p>
+      ) : null}
+      {face.defense != null ? (
+        <p className="mt-3 text-right font-mono text-sm">Defense {face.defense}</p>
+      ) : null}
     </div>
   )
 }

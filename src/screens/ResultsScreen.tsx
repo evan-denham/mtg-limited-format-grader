@@ -412,10 +412,9 @@ function CardGallery({ rows, withText }: { rows: Row[]; withText: boolean }) {
                   g?.grade ? (
                     <span
                       key={graders[i].id}
-                      className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-xs text-muted"
-                      title={graders[i].name}
+                      className="rounded border border-edge bg-raised px-1.5 py-0.5 text-xs text-muted"
                     >
-                      {graders[i].name.slice(0, 1)} {g.grade}
+                      {graders[i].name} <span className="font-mono text-text">{g.grade}</span>
                     </span>
                   ) : null,
                 )}

@@ -123,3 +123,43 @@ describe('collectorSortValue', () => {
     expect(collectorSortValue('NaN-ish')).toBe(Number.MAX_SAFE_INTEGER)
   })
 })
+
+describe('cards whose faces share one printed image', () => {
+  // Adventures, splits and flip cards put every face on a single image. They
+  // have card_faces but no per-face image_uris, so there is nothing to flip to
+  // and all of the rules text has to be rendered at once. Getting this wrong
+  // hid the entire Adventure half of 16 cards in The Hobbit.
+  const shared = ['Bofur', 'Never']
+
+  for (const needle of shared) {
+    it(`${needle}: keeps every face, with text on each`, () => {
+      const raw = byName(needle)
+      const c = mapCard(raw, 'main')
+
+      expect(c.faces.length).toBeGreaterThan(1)
+      for (const face of c.faces) {
+        expect(face.name.length, `${c.name} face has no name`).toBeGreaterThan(0)
+        expect((face.oracleText ?? '').length, `${face.name} has no rules text`).toBeGreaterThan(0)
+      }
+    })
+
+    it(`${needle}: is not marked multiFaced, because there is nothing to flip`, () => {
+      // multiFaced drives the flip control and must mean "separate images",
+      // not merely "several faces".
+      expect(mapCard(byName(needle), 'main').multiFaced).toBe(false)
+    })
+
+    it(`${needle}: every face carries the one shared image`, () => {
+      for (const face of mapCard(byName(needle), 'main').faces) {
+        expect(face.imageNormal).toMatch(/^https:\/\//)
+      }
+    })
+  }
+
+  it('the second face is not the same as the first', () => {
+    const c = mapCard(byName('Bofur'), 'main')
+    expect(c.faces[0].name).not.toBe(c.faces[1].name)
+    expect(c.faces[0].oracleText).not.toBe(c.faces[1].oracleText)
+    expect(c.faces[1].typeLine).toContain('Adventure')
+  })
+})
