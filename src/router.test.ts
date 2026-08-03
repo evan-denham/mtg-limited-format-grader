@@ -23,8 +23,23 @@ describe('parseHash', () => {
     expect(parseHash('#/join')).toEqual({ name: 'join', code: '' })
   })
 
+  it('reads a read-only share link', () => {
+    expect(parseHash('#/v/abc/tok-123')).toEqual({
+      name: 'view',
+      sessionId: 'abc',
+      token: 'tok-123',
+    })
+  })
+
+  it('does not treat a share link missing its token as a valid view', () => {
+    // Without the token there is no credential, so this must not resolve to a
+    // view route that would then load nothing.
+    expect(parseHash('#/v/abc').name).toBe('landing')
+  })
+
   it('round-trips every route through hrefFor', () => {
     const routes: Route[] = [
+      { name: 'view', sessionId: 'abc', token: 'tok-123' },
       { name: 'landing' },
       { name: 'create' },
       { name: 'join', code: 'MXK-492' },

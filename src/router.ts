@@ -14,6 +14,7 @@ export type Route =
   | { name: 'grade'; sessionId: string }
   | { name: 'results'; sessionId: string }
   | { name: 'settings'; sessionId: string }
+  | { name: 'view'; sessionId: string; token: string }
 
 export function parseHash(hash: string): Route {
   const path = hash.replace(/^#/, '').replace(/^\//, '')
@@ -21,6 +22,9 @@ export function parseHash(hash: string): Route {
 
   if (parts[0] === 'create') return { name: 'create' }
   if (parts[0] === 'join') return { name: 'join', code: parts[1] ?? '' }
+  if (parts[0] === 'v' && parts[1] && parts[2]) {
+    return { name: 'view', sessionId: parts[1], token: parts[2] }
+  }
   if (parts[0] === 's' && parts[1]) {
     const sessionId = parts[1]
     const tab = parts[2] ?? 'grade'
@@ -43,6 +47,8 @@ export function hrefFor(route: Route): string {
       return `#/s/${route.sessionId}/results`
     case 'settings':
       return `#/s/${route.sessionId}/settings`
+    case 'view':
+      return `#/v/${route.sessionId}/${route.token}`
     default:
       return '#/'
   }

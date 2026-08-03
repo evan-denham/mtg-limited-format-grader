@@ -12,7 +12,8 @@
     "verify": "vite-node scripts/verify-pool.ts",
     "verify:rls": "vite-node scripts/verify-rls.ts",
     "verify:sync": "vite-node scripts/verify-sync.ts",
-    "verify:add-grader": "vite-node scripts/verify-add-grader.ts"
+    "verify:add-grader": "vite-node scripts/verify-add-grader.ts",
+    "verify:share": "vite-node scripts/verify-share.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

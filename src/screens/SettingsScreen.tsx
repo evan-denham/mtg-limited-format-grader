@@ -48,6 +48,7 @@ export function SettingsScreen() {
       </Panel>
 
       {isHost ? <GraderPins /> : null}
+      {isHost ? <ShareLink /> : null}
 
       <Panel className="space-y-4">
         <div className="text-sm">Grading order</div>
@@ -158,6 +159,67 @@ export function SettingsScreen() {
         </Notice>
       ) : null}
     </div>
+  )
+}
+
+/** Read-only share link. Anyone holding it can see results and nothing else;
+ *  the write policies do not accept the view token. */
+function ShareLink() {
+  const meta = useSession((s) => s.meta)
+  const [copied, setCopied] = useState(false)
+
+  if (!meta) return null
+
+  if (!isBackendConfigured) {
+    return (
+      <Panel className="space-y-2">
+        <div className="text-sm">Share results</div>
+        <Notice tone="warn">
+          Sharing needs Supabase configured. Local-only sessions have nothing to share to.
+        </Notice>
+      </Panel>
+    )
+  }
+
+  if (!meta.viewToken) {
+    return (
+      <Panel className="space-y-2">
+        <div className="text-sm">Share results</div>
+        <Notice tone="warn">
+          This session has no share token yet. Run migration 0006, then reload.
+        </Notice>
+      </Panel>
+    )
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}#/v/${meta.id}/${meta.viewToken}`
+
+  return (
+    <Panel className="space-y-3">
+      <div className="text-sm">Share results</div>
+      <p className="text-xs text-muted">
+        Anyone with this link can read the results, including notes. They cannot grade, change
+        settings, or see the session password. The link is the only credential, so treat it as
+        one.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Input value={url} readOnly onFocus={(e) => e.currentTarget.select()} />
+        <Button
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            } catch {
+              // Clipboard access can be refused; the field is selectable anyway.
+              setCopied(false)
+            }
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+    </Panel>
   )
 }
 

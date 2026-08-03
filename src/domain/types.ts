@@ -127,6 +127,8 @@ export interface SessionMeta {
   /** The grader who created the session. Decides who is shown the PIN list.
    *  UI convenience only; anyone with the code can read the table directly. */
   hostGraderId: string | null
+  /** Read-only share token. Present only for readers allowed to see it. */
+  viewToken: string | null
 }
 
 // Re-exported from grades.ts to keep the type surface in one import site.

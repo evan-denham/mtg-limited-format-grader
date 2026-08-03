@@ -196,6 +196,8 @@ export function CreateSession() {
         bonusSets: requests.map((r) => ({ code: r.code, name: r.name })),
         settings: finalSettings,
         hostGraderId,
+        // The server generates it; a reload picks it up.
+        viewToken: null,
       }
 
       if (isBackendConfigured) {

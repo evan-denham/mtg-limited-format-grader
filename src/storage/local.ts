@@ -15,6 +15,7 @@ const INDEX_KEY = 'mtglfg.index'
 const IDENTITY_PREFIX = 'mtglfg.identity.'
 const PASSWORD_PREFIX = 'mtglfg.password.'
 const ADMIN_KEY = 'mtglfg.admin'
+const VIEW_TOKEN_PREFIX = 'mtglfg.view.'
 
 export interface LocalSession {
   meta: SessionMeta
@@ -78,6 +79,7 @@ export function deleteSession(sessionId: string): void {
   localStorage.removeItem(POOL_PREFIX + sessionId)
   localStorage.removeItem(IDENTITY_PREFIX + sessionId)
   localStorage.removeItem(PASSWORD_PREFIX + sessionId)
+  localStorage.removeItem(VIEW_TOKEN_PREFIX + sessionId)
   write(
     INDEX_KEY,
     listSessions().filter((s) => s.id !== sessionId),
@@ -150,6 +152,7 @@ export function saveSessionPassword(sessionId: string, password: string): void {
 
 export function clearSessionPassword(sessionId: string): void {
   localStorage.removeItem(PASSWORD_PREFIX + sessionId)
+  localStorage.removeItem(VIEW_TOKEN_PREFIX + sessionId)
 }
 
 // --- Admin password ---
@@ -199,6 +202,26 @@ export function loadGradeBarOpen(): boolean {
 export function saveGradeBarOpen(open: boolean): void {
   try {
     localStorage.setItem(GRADE_BAR_KEY, open ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
+
+// --- Read-only view token ---
+// Kept so a share link survives a reload without the token staying in the URL.
+
+export function loadViewToken(sessionId: string): string | null {
+  try {
+    return localStorage.getItem(VIEW_TOKEN_PREFIX + sessionId)
+  } catch {
+    return null
+  }
+}
+
+export function saveViewToken(sessionId: string, token: string): void {
+  try {
+    localStorage.setItem(VIEW_TOKEN_PREFIX + sessionId, token)
   } catch {
     /* ignore */
   }

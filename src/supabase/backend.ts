@@ -89,6 +89,7 @@ interface SessionRow {
   cards: CardRecord[]
   settings: GradingSettings
   host_grader_id: string | null
+  view_token: string | null
 }
 
 interface GraderRow {
@@ -178,8 +179,16 @@ function makeSupabaseBackend(): Backend {
   }
   /** The session password is read from storage so callers do not each have to
    *  thread it through. It is put there by the unlock flow on join. */
+  // A reader may hold either the session password or a view token. Both are
+  // sent when present; the write policies accept only the former.
   const forSession = (sessionId: string) =>
-    need(clientFor({ sessionId, password: local.loadSessionPassword(sessionId) }))
+    need(
+      clientFor({
+        sessionId,
+        password: local.loadSessionPassword(sessionId),
+        viewToken: local.loadViewToken(sessionId),
+      }),
+    )
   const forCode = (code: string, password: string) => need(clientFor({ code, password }))
   const asAdmin = (adminPassword: string, extra: { sessionId?: string; code?: string } = {}) =>
     need(clientFor({ ...extra, adminPassword }))
@@ -257,6 +266,7 @@ function makeSupabaseBackend(): Backend {
           bonusSets: row.bonus_sets ?? [],
           settings: row.settings,
           hostGraderId: row.host_grader_id ?? null,
+          viewToken: row.view_token ?? null,
         },
         cards: row.cards ?? [],
         graders: ((graders ?? []) as GraderRow[]).map(toGrader),

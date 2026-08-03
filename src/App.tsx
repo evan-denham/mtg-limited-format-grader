@@ -7,6 +7,7 @@ import { PickGrader } from './screens/PickGrader'
 import { ResultsScreen } from './screens/ResultsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { UnlockSession } from './screens/UnlockSession'
+import { ViewOnlyResults } from './screens/ViewOnlyResults'
 import * as local from './storage/local'
 import { isBackendConfigured } from './supabase/client'
 import { Notice, Spinner } from './components/ui'
@@ -28,29 +29,45 @@ export default function App() {
 
   // Since 0004 the session password is required before anything can be read,
   // so hold off loading until it is available.
+  const isView = route.name === 'view'
   const hasPassword =
-    !isBackendConfigured || !sessionId || Boolean(local.loadSessionPassword(sessionId))
+    !isBackendConfigured ||
+    !sessionId ||
+    isView ||
+    Boolean(local.loadSessionPassword(sessionId))
 
   // Load whenever the route points at a session we do not already hold.
   useEffect(() => {
+    // ViewOnlyResults loads for itself, after storing its token.
+    if (isView) return
     if (sessionId && hasPassword && meta?.id !== sessionId) void load(sessionId)
-  }, [sessionId, hasPassword, meta?.id, load])
+  }, [isView, sessionId, hasPassword, meta?.id, load])
 
   // Live sync. Re-subscribes only when the session changes.
   useEffect(() => {
-    if (!sessionId || !backend.configured) return
+    if (!sessionId || !backend.configured || isView) return
     return backend.subscribe(sessionId, {
       onGrade: applyRemoteGrade,
       onGrader: applyRemoteGrader,
       onSettings: applyRemoteSettings,
     })
-  }, [sessionId, applyRemoteGrade, applyRemoteGrader, applyRemoteSettings])
+  }, [isView, sessionId, applyRemoteGrade, applyRemoteGrader, applyRemoteSettings])
 
   if (route.name === 'landing') {
     return <Shell><Landing /></Shell>
   }
   if (route.name === 'create') {
     return <Shell><CreateSession /></Shell>
+  }
+
+  // A share link needs no grader identity and no session password, so it is
+  // handled before either of those gates.
+  if (route.name === 'view') {
+    return (
+      <Shell wide>
+        <ViewOnlyResults sessionId={route.sessionId} token={route.token} />
+      </Shell>
+    )
   }
 
   if (sessionId && !hasPassword) {

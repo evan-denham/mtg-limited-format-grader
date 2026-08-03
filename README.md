@@ -24,6 +24,7 @@ joined from another device.
 | `npm run verify` | Live checks against the real Scryfall API |
 | `npm run verify:rls` | Live checks that the access rules hold (needs `ADMIN_PASSWORD`) |
 | `npm run verify:sync` | Live two-device sync check (needs `ADMIN_PASSWORD`) |
+| `npm run verify:share` | Live check that a share link reads but cannot write (needs `ADMIN_PASSWORD`) |
 | `npm run verify:add-grader` | Live check that graders can join mid-session (needs `ADMIN_PASSWORD`) |
 | `npm run lint` | oxlint |
 
@@ -59,6 +60,18 @@ Three secrets with distinct jobs:
 | Admin password | whoever runs sessions | create sessions, add graders, delete sessions |
 | Session password | everyone grading that session | read and grade that one session |
 | Grader PIN | one person | which grader you are |
+| Share link | anyone you send it to | read the results, and nothing else |
+
+A share link is a read-only URL the host can copy from Settings. It carries a
+UUID view token, and the policies split read from write: `can_access_session`
+accepts admin, grader or viewer, while `can_write_session` accepts admin or
+grader only. Hiding the grading controls would not have been enough, since the
+anon key is in the bundle and the REST API is a fetch away, so a viewer is
+refused at the database. `npm run verify:share` attempts every write path with
+a view token and asserts each one fails.
+
+The link is the only credential it carries, so treat it as one: anyone holding
+it can read that session's grades and notes.
 
 Graders can be added after a session has started, from Settings, by the host.
 It needs the admin password, matching the policy on inserts into `graders`.

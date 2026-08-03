@@ -60,6 +60,7 @@ function input(over: Partial<ExportInput> = {}): ExportInput {
       bonusSets: [],
       settings: DEFAULT_SETTINGS,
       hostGraderId: 'g1',
+      viewToken: null,
     },
     cards: [card()],
     graders,

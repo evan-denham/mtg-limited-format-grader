@@ -29,6 +29,9 @@ export interface SessionContext {
    *  to localStorage and never part of the bundle: it is typed each time and
    *  compared inside Postgres. */
   adminPassword?: string | null
+  /** Read-only share token. Grants select and nothing else; the write policies
+   *  deliberately do not accept it. */
+  viewToken?: string | null
 }
 
 const cache = new Map<string, SupabaseClient>()
@@ -36,7 +39,13 @@ const cache = new Map<string, SupabaseClient>()
 function contextKey(ctx: SessionContext): string {
   // Trim before keying too, or "pw" and "pw " would cache as different
   // clients that then send identical headers.
-  return [ctx.sessionId ?? '', ctx.code ?? '', ctx.password ?? '', ctx.adminPassword ?? '']
+  return [
+    ctx.sessionId ?? '',
+    ctx.code ?? '',
+    ctx.password ?? '',
+    ctx.adminPassword ?? '',
+    ctx.viewToken ?? '',
+  ]
     .map((v) => v.trim())
     .join('|')
 }
@@ -59,6 +68,7 @@ export function clientFor(ctx: SessionContext = {}): SupabaseClient | null {
   if (ctx.code) headers['x-session-code'] = ctx.code.trim()
   if (ctx.password) headers['x-session-password'] = ctx.password.trim()
   if (ctx.adminPassword) headers['x-admin-password'] = ctx.adminPassword.trim()
+  if (ctx.viewToken) headers['x-view-token'] = ctx.viewToken.trim()
 
   const client = createClient(url as string, anonKey as string, {
     auth: { persistSession: false },
